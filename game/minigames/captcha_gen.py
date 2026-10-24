@@ -1,12 +1,20 @@
 import os
+import io
 import random
 import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance
+
+try:
+    from captchaCaptionImageGen import generate_attngan_captcha, get_attngan_model
+except ImportError:
+    generate_attngan_captcha = None
+    get_attngan_model = None
 
 CAPTCHA_SUBJECTS = {
     "cat_on_car": {
         "title": "A Cat on a Car",
         "description": "an orange cat sitting on the roof of a parked red car under a streetlamp at night",
+        "attngan_prompt": "a cat sitting on the roof of a parked red car on the street",
         "fallbacks": [
             "An orange cat perched on top of a red car acting like it owns the vehicle.",
             "Feline overlord refusing to pay parking fees while loafing on an automobile roof.",
@@ -17,6 +25,7 @@ CAPTCHA_SUBJECTS = {
     "ufo_abducting_cow": {
         "title": "A UFO Abducting a Cow",
         "description": "a flying saucer hovering in the sky using a glowing tractor beam to abduct a spotted cow from a field",
+        "attngan_prompt": "a flying aircraft in the night sky over a cow standing in a grassy field",
         "fallbacks": [
             "A UFO tractor-beaming a cow into outer space at midnight.",
             "Extraterrestrials performing their routine dairy acquisition mission.",
@@ -27,6 +36,7 @@ CAPTCHA_SUBJECTS = {
     "dino_chasing_bus": {
         "title": "A Dinosaur Chasing a School Bus",
         "description": "a green dinosaur chasing a yellow school bus down a street past a stop sign",
+        "attngan_prompt": "a large green animal chasing a yellow school bus down a street next to a stop sign",
         "fallbacks": [
             "A T-Rex trying to catch the morning school bus because it missed its alarm.",
             "Godzilla casually tailgating a yellow school bus in morning traffic.",
@@ -37,6 +47,7 @@ CAPTCHA_SUBJECTS = {
     "bear_on_bike": {
         "title": "A Bear on a Tiny Bicycle",
         "description": "a large brown bear riding a comically small bicycle across a pedestrian crosswalk",
+        "attngan_prompt": "a large brown bear riding a small bicycle across a pedestrian crosswalk",
         "fallbacks": [
             "A massive bear testing the weight limit of a miniature bicycle in the crosswalk.",
             "Circus bear commuting to work on two tiny wheels.",
@@ -47,6 +58,7 @@ CAPTCHA_SUBJECTS = {
     "hydrant_geyser_cat": {
         "title": "A Fire Hydrant Geyser and Panicking Cat",
         "description": "a broken fire hydrant shooting a giant geyser of water into the air next to a wet cat running away on a sidewalk",
+        "attngan_prompt": "a red fire hydrant spraying water into the air next to a wet cat running on a sidewalk",
         "fallbacks": [
             "A municipal fire hydrant erupting like Old Faithful while a soaking wet cat flees the splash zone.",
             "Total water pipe catastrophe turning the sidewalk into an unplanned waterpark.",
@@ -57,6 +69,7 @@ CAPTCHA_SUBJECTS = {
     "raccoon_trash_heist": {
         "title": "A Raccoon Raiding a Trash Can",
         "description": "a raccoon rummaging through a knocked-over trash can with garbage spilling onto the sidewalk under a street sign at night",
+        "attngan_prompt": "a raccoon rummaging through a metal trash can on the sidewalk under a street sign at night",
         "fallbacks": [
             "A trash panda conducting an aggressive midnight audit of someone's garbage can.",
             "A raccoon caught red-handed tipping over a trash can by a stop sign.",
@@ -67,6 +80,7 @@ CAPTCHA_SUBJECTS = {
     "robot_walking_dog": {
         "title": "A Robot Walking a Cyber Dog",
         "description": "a humanoid robot walking a mechanical dog on a leash past a traffic light in a futuristic city",
+        "attngan_prompt": "a metallic robot walking a dog on a leash past a traffic light on a city street",
         "fallbacks": [
             "A robot taking its dog for a walk while waiting for the traffic light to turn green.",
             "Future municipal compliance: cyborg walking a mechanical canine down the sidewalk.",
@@ -77,6 +91,7 @@ CAPTCHA_SUBJECTS = {
     "ufo_at_red_light": {
         "title": "A UFO Stopped at a Red Light",
         "description": "a tiny alien spaceship stopped patiently at a red traffic light above a pedestrian crosswalk",
+        "attngan_prompt": "a small vehicle stopped at a red traffic light above a pedestrian crosswalk",
         "fallbacks": [
             "An extraterrestrial spaceship actually obeying municipal traffic signals.",
             "Alien in a flying saucer stuck at a red light in rush hour traffic.",
@@ -87,6 +102,7 @@ CAPTCHA_SUBJECTS = {
     "cat_blocking_traffic": {
         "title": "A Giant Cat Blocking Traffic",
         "description": "a giant lazy cat sprawled across the road blocking a yellow school bus and traffic",
+        "attngan_prompt": "a giant orange cat lying across the street blocking a yellow bus and cars",
         "fallbacks": [
             "Major traffic standstill caused by a gigantic cat taking an afternoon nap across both lanes.",
             "School bus halted by a furry feline roadblock refusing to budge.",
@@ -97,6 +113,7 @@ CAPTCHA_SUBJECTS = {
     "snowman_campfire": {
         "title": "A Snowman by a Campfire",
         "description": "a snowman standing next to a crackling campfire in the snow, beginning to melt under the night sky",
+        "attngan_prompt": "a white snowman standing next to a burning campfire in the snow at night",
         "fallbacks": [
             "A snowman making the questionable life choice of warming up next to a blazing campfire.",
             "Frosty discovering the tragic laws of thermodynamics by a campfire.",
@@ -107,6 +124,7 @@ CAPTCHA_SUBJECTS = {
     "shark_in_flood": {
         "title": "A Shark in a Flooded Street",
         "description": "a flooded street with a shark fin swimming around a submerged stop sign during a rainstorm",
+        "attngan_prompt": "a flooded city street with deep water and a stop sign during a rainstorm",
         "fallbacks": [
             "Flash flood warning upgraded to shark warning near the flooded stop sign.",
             "A shark swimming down main street during a torrential downpour.",
@@ -117,6 +135,7 @@ CAPTCHA_SUBJECTS = {
     "wizard_summoning_pizza": {
         "title": "A Wizard Summoning Giant Pizza",
         "description": "a wizard with a pointy hat and staff casting a spell to summon a giant slice of pizza from a thundercloud",
+        "attngan_prompt": "a person wearing a pointy hat with a giant slice of pizza in the sky",
         "fallbacks": [
             "A wizard using forbidden arcane magic to conjure midnight pepperoni pizza.",
             "Sorcerer striking lightning from the sky to manifest a giant pizza slice.",
@@ -547,36 +566,52 @@ def draw_subject_base(subject_key: str, size=(160, 160)) -> Image.Image:
 
     return img
 
-def create_captcha_asset(subject_key: str, output_path: str, target_size=(360, 360)) -> str:
-    """
-    Applies the degradation algorithm from captchaCaptionImageGen.py
-    (low-res draw -> subtle noise -> aggressive JPEG compression artifacting -> nearest neighbor upscale -> contrast boost).
-    """
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+def is_attngan_active() -> bool:
+    """Returns True if AttnGAN model is loaded and ready for generations."""
+    if get_attngan_model is None:
+        return False
+    try:
+        return get_attngan_model(dataset="coco") is not None
+    except Exception:
+        return False
 
-    # 1. Draw base subject at 160x160 resolution for multi-element clarity
-    base_img = draw_subject_base(subject_key, size=(160, 160))
+def create_captcha_asset(prompt_or_key: str, output_path: str, target_size=(360, 360)) -> str:
+    """
+    Generates a crunchy CAPTCHA image using the AttnGAN text-to-image neural network.
+    Accepts either a dynamic prompt string or a subject key.
+    Falls back gracefully to procedural generation if AttnGAN is unavailable.
+    """
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
-    # 2. Add subtle grain/noise
+    if prompt_or_key in CAPTCHA_SUBJECTS:
+        subject_info = CAPTCHA_SUBJECTS[prompt_or_key]
+        prompt = subject_info.get("attngan_prompt") or subject_info.get("description") or prompt_or_key.replace("_", " ")
+        fallback_key = prompt_or_key
+    else:
+        prompt = prompt_or_key
+        fallback_key = random.choice(list(CAPTCHA_SUBJECTS.keys()))
+
+    if generate_attngan_captcha is not None:
+        try:
+            generate_attngan_captcha(prompt, output_path=output_path, target_size=target_size)
+            return output_path
+        except Exception as e:
+            print(f"[AttnGAN] Generation failed for '{prompt[:30]}...' ({e}); using procedural fallback.")
+
+    # Procedural Fallback if AttnGAN model failed or was not loaded
+    base_img = draw_subject_base(fallback_key, size=(160, 160))
     noise = np.random.randint(-12, 12, (160, 160, 3), dtype=np.int16)
     arr = np.clip(np.array(base_img, dtype=np.int16) + noise, 0, 255).astype(np.uint8)
     noisy_img = Image.fromarray(arr)
 
-    # 3. Intentional heavy JPEG compression degradation (quality=10 adds crunchy block artifacts)
-    temp_jpg = output_path + ".temp.jpg"
-    noisy_img.save(temp_jpg, "JPEG", quality=10)
-    fried = Image.open(temp_jpg)
+    buf = io.BytesIO()
+    noisy_img.save(buf, "JPEG", quality=35)
+    buf.seek(0)
+    fried = Image.open(buf)
 
-    # 4. Nearest-Neighbor upscale to preserve chunky pixelated squares
     captcha_img = fried.resize(target_size, resample=Image.Resampling.NEAREST)
-
-    # 5. Contrast and color enhancement
     enhancer = ImageEnhance.Contrast(captcha_img)
-    captcha_img = enhancer.enhance(1.35)
-
+    captcha_img = enhancer.enhance(1.15)
     captcha_img.save(output_path, "PNG")
-
-    if os.path.exists(temp_jpg):
-        os.remove(temp_jpg)
 
     return output_path

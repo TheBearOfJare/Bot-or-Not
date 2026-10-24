@@ -40,7 +40,7 @@ class BotEngine:
             payload = {
                 "model": self.model,
                 "prompt": prompt,
-                "system": system_prompt or "You are playing a party game where you try to write funny, casual human-like responses.",
+                "system": system_prompt or "You are playing a party game where you try to write short, casual, human-like responses.",
                 "stream": False,
                 "think": False,
                 "options": {
@@ -52,9 +52,9 @@ class BotEngine:
             # If an image is provided, feed it to Ollama vision
             if image_path and os.path.exists(image_path):
                 try:
-                    img = Image.open(image_path).convert("RGB").resize((180, 180))
+                    img = Image.open(image_path).convert("RGB").resize((360, 360))
                     buf = io.BytesIO()
-                    img.save(buf, format="JPEG", quality=80)
+                    img.save(buf, format="JPEG", quality=85)
                     b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
                     payload["images"] = [b64]
                 except Exception as img_err:
@@ -82,11 +82,12 @@ class BotEngine:
 
     def generate_pun_punchline(self, pun_setup: str, fallback_answers: list = None) -> str:
         prompt = (
-            f"You are a player in the game 'Bot or Not'. The prompt is: '{pun_setup}'. "
+            f"You are a player in a game, trying to complete puns. "
+            f"The prompt is: '{pun_setup}'. "
             f"Provide ONLY the punchline/completion for this pun in 1-8 words. "
             f"Do not include explanations, thinking, or extra text."
         )
-        sys_prompt = "You write punchy, cheesy, or slightly robotic punchlines to puns."
+        sys_prompt = "You write humorous, witty, or ironic punchlines to puns."
         ans = self.query_ollama(prompt, sys_prompt, num_predict=35)
         if ans:
             return ans
@@ -96,8 +97,8 @@ class BotEngine:
 
     def generate_review(self, product_name: str, fallback_answers: list = None) -> str:
         prompt = (
-            f"You are writing a hilarious, absurd 1-star product review for '{product_name}'. "
-            f"Write 1 or 2 sentences max explaining why it is utterly terrible. "
+            f"You are writing a 1-star product review for '{product_name}'. "
+            f"Write 1-2 sentence fragments explaining why it is utterly terrible. "
             f"Do not include quotes or review headers."
         )
         sys_prompt = "You are an angry, petty online reviewer leaving a 1-star complaint."
@@ -124,19 +125,79 @@ class BotEngine:
             return random.sample(fallback_answers, 3)
         return ["My algorithm", "Syntax errors", "Rebooting the server"]
 
-    def generate_captcha_caption(self, image_path: str, image_description: str, fallback_answers: list = None) -> str:
+    def generate_dynamic_captcha_prompt(self) -> dict:
         """
-        Feeds the actual generated scene image to Ollama Vision!
+        Dynamically generates a fresh CAPTCHA prompt on the fly using Ollama,
+        intermixing common CAPTCHA subjects with descriptive COCO terms (colors, objects, actions, locations).
+        Falls back to a procedural COCO mix if Ollama is offline or times out.
+        """
+        CAPTCHA_OBJECTS = [
+            "fire hydrant", "school bus", "red car", "bicycle", "motorcycle",
+            "traffic light", "stop sign", "cat", "dog", "cow", "bear",
+            "slice of pizza", "boat", "train", "bench", "crosswalk", "umbrella"
+        ]
+        COCO_COLORS = ["red", "yellow", "blue", "green", "orange", "black", "white", "brown"]
+        COCO_ACTIONS = [
+            "parked next to", "stopped near", "sitting beside", "standing in front of",
+            "crossing near", "waiting beside", "resting under"
+        ]
+        COCO_LOCATIONS = [
+            "a sidewalk in the city", "a street corner", "a crosswalk on the road",
+            "a tree in the park", "a sunny street", "a road near a building"
+        ]
+
+        seed_subject = random.choice(CAPTCHA_OBJECTS)
+        prompt_builder = (
+            f"You are designing a prompt for an image generator in a party game. "
+            f"Write a simple, concrete 1-sentence scene description (8 to 14 words) featuring a {seed_subject}. "
+            f"Combine it with everyday objects (like cars, bikes, hydrants, signs, streets, or animals). "
+            f"Use clear visual words: colors, actions, and locations. "
+            f"Example: 'A large brown dog sitting next to a red fire hydrant on the sidewalk.' "
+            f"Output ONLY the single sentence. No quotes, no explanations."
+        )
+        sys_prompt = "You are a concise visual prompt designer creating simple concrete scenes."
+
+        generated_text = self.query_ollama(prompt_builder, sys_prompt, num_predict=35)
+        if generated_text:
+            cleaned = generated_text.strip().strip('"\'*`\n').split('\n')[0].strip()
+            if len(cleaned.split()) >= 4:
+                return {
+                    "prompt": cleaned,
+                    "seed": seed_subject,
+                    "title": f"Verification: {seed_subject.title()}"
+                }
+
+        # Robust procedural fallback if Ollama times out or fails
+        color1 = random.choice(COCO_COLORS)
+        obj2 = random.choice([o for o in CAPTCHA_OBJECTS if o != seed_subject])
+        color2 = random.choice(COCO_COLORS)
+        action = random.choice(COCO_ACTIONS)
+        loc = random.choice(COCO_LOCATIONS)
+        fallback_prompt = f"A {color1} {seed_subject} {action} a {color2} {obj2} on {loc}."
+        return {
+            "prompt": fallback_prompt,
+            "seed": seed_subject,
+            "title": f"Verification: {seed_subject.title()}"
+        }
+
+    def generate_captcha_caption(self, image_path: str, fallback_answers: list = None) -> str:
+        """
+        Feeds ONLY the raw image to Ollama Vision with NO text spoilers or hints.
+        The bot is strictly forced to interpret what it sees directly from the image.
+        Uses a confident, casual guessing prompt to maximize descriptive guesses without refusals.
         """
         prompt = (
-            f"You are a human player playing a funny party game looking at this weird scene: {image_description}. "
-            f"Write a short, casual, funny 1-sentence caption describing what is happening in the scene. "
-            f"Sound like a casual party game player. Do not mention the words CAPTCHA, robot, AI, or clicking."
+            "Look at the attached image. You are playing a fun picture-guessing party game with friends.\n"
+            "Describe what this weird, glitchy picture looks like to you (objects, vehicles, animals, shapes, colors, or scene).\n"
+            "Give a confident, casual 1-sentence guess of what you see. 1 sentence max, minimal punctuation.\n"
+            "Do not apologize, do not say it is blurry or distorted, and never say you don't know—just give your best confident guess!"
         )
-        sys_prompt = "You are a casual player in a party game writing a funny one-sentence description of the humorous scene."
-        ans = self.query_ollama(prompt, sys_prompt, image_path=image_path, num_predict=65)
+        sys_prompt = "You are a casual player in an image-guessing party game. You always confidently name whatever objects, creatures, vehicles, or scene you see in the picture."
+        ans = self.query_ollama(prompt, sys_prompt, image_path=image_path, num_predict=45)
         if ans:
-            return ans
+            cleaned = ans.strip().strip('"\'*`\n').replace('"', '')
+            if cleaned:
+                return cleaned
         if fallback_answers:
             return random.choice(fallback_answers)
-        return f"A weird scene where {image_description}."
+        return "A weird colorful contraption on the street."

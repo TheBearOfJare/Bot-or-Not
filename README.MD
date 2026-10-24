@@ -27,6 +27,7 @@ Structure:
 - Automatic LAN IP detection and dynamic QR code generation for quick mobile joining
 - Ollama LLM integration (`game/bot_engine.py`) using Qwen (with offline fallback templates)
 - Highly flexible playlist sequence: play all 4 minigames + bonus round, or customize in `config.py` or from the host setup lobby
+- Bots do their best to pass as humans
 
 ### Quickstart
 

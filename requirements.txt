@@ -4,6 +4,6 @@ pillow>=10.0.0
 requests>=2.31.0
 numpy>=1.24.0
 
-# Optional dependencies for ML/AttnGAN captcha generation:
-# torch
-# torchvision
+# ML/AttnGAN captcha generation dependencies:
+torch>=2.0.0
+torchvision>=0.15.0

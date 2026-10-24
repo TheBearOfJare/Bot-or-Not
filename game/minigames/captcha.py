@@ -1,4 +1,5 @@
 import os
+import time
 import random
 from game.minigames.base import BaseMinigame
 from game.minigames.captcha_gen import CAPTCHA_SUBJECTS, create_captcha_asset
@@ -8,7 +9,7 @@ class CaptchaCaptionGame(BaseMinigame):
         super().__init__(
             game_id="captcha",
             title="Captcha Caption",
-            instruction="Look at this terrible, glitchy CAPTCHA image. Write a funny, human description of what you see!",
+            instruction="Decipher and describe the contents of the CAPTCHA shown to you.",
             bot_engine=bot_engine,
             bot_count=bot_count
         )
@@ -18,16 +19,28 @@ class CaptchaCaptionGame(BaseMinigame):
         self.image_filepath = None
 
     def _select_prompt(self):
-        self.chosen_subject_key = random.choice(list(CAPTCHA_SUBJECTS.keys()))
-        self.chosen_subject = CAPTCHA_SUBJECTS[self.chosen_subject_key]
+        # Generate prompt dynamically on the fly combining CAPTCHA objects and COCO terms
+        prompt_info = self.bot_engine.generate_dynamic_captcha_prompt()
+        self.chosen_prompt = prompt_info["prompt"]
+        self.chosen_subject_key = prompt_info.get("seed", "captcha")
+        self.chosen_subject = CAPTCHA_SUBJECTS.get(self.chosen_subject_key, {
+            "title": prompt_info.get("title", "Security Verification"),
+            "description": self.chosen_prompt,
+            "fallbacks": [
+                "A glitchy scene captured on an old security camera.",
+                "Looks like an everyday street scene that melted in the microwave.",
+                "A colorful abstract puzzle that somehow passes as a CAPTCHA."
+            ]
+        })
         
-        img_filename = f"captcha_{self.chosen_subject_key}.png"
+        ts = int(time.time())
+        img_filename = f"captcha_{self.chosen_subject_key}_{ts}.png"
         self.image_filepath = os.path.join("static", "images", "captchas", img_filename)
 
-        # Generate crunchy CAPTCHA image with intentional degradation trick
-        create_captcha_asset(self.chosen_subject_key, self.image_filepath)
+        # Generate crunchy CAPTCHA image from dynamic prompt
+        create_captcha_asset(self.chosen_prompt, self.image_filepath)
 
-        self.image_url = f"/static/images/captchas/{img_filename}"
+        self.image_url = f"/static/images/captchas/{img_filename}?v={ts}"
 
         self.prompt_data = {
             "type": "image_caption",
@@ -43,11 +56,11 @@ class CaptchaCaptionGame(BaseMinigame):
             bot_name = self.bot_engine.get_bot_display_name()
             self.bot_ids.append(bot_id)
 
-            # Feed the generated image directly to Ollama vision!
+            # Feed ONLY the image to Ollama vision - no prompt/description cheating!
+            fallbacks = self.chosen_subject.get("fallbacks") if self.chosen_subject else None
             caption = self.bot_engine.generate_captcha_caption(
                 image_path=self.image_filepath,
-                image_description=self.chosen_subject["description"],
-                fallback_answers=self.chosen_subject["fallbacks"]
+                fallback_answers=fallbacks
             )
 
             sub_id = f"sub_{bot_id}"
