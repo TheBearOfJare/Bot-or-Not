@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}Bot or Not - Host Screen{% endblock %}
+
+{% block content %}
+<div class="container">
+    <header class="host-header">
+        <div>
+            <h1>🤖 BOT OR NOT</h1>
+            <p class="subtitle" id="host-subtitle">Party Deduction Game</p>
+        </div>
+        <div id="host-network-info" style="text-align: right;">
+            <div style="font-size: 0.9rem; color: #9ca3af;">Join at URL:</div>
+            <div class="join-url" id="join-url-text">http://{{ local_ip }}:{{ port }}/player</div>
+        </div>
+    </header>
+
+    <!-- Phase 1: LOBBY -->
+    <section id="phase-lobby" class="card">
+        <div class="host-grid">
+            <!-- Left: QR Code & Connection -->
+            <div style="text-align: center;">
+                <h2>Scan to Join on Your Phone</h2>
+                <p class="subtitle">Connect to the same Wi-Fi network and scan the QR code:</p>
+                <div class="qr-box">
+                    <img src="/qr" alt="Join Game QR Code" id="lobby-qr-img">
+                </div>
+                <div class="join-url">http://{{ local_ip }}:{{ port }}/player</div>
+            </div>
+
+            <!-- Right: Joined Players & Game Setup -->
+            <div>
+                <h2>Joined Players (<span id="player-count">0</span>)</h2>
+                <div class="player-list" id="lobby-players-list">
+                    <p style="color: #9ca3af;" id="no-players-text">Waiting for players to join with their phones...</p>
+                </div>
+
+                <div style="margin-top: 28px;">
+                    <h3>Game Playlist Setup</h3>
+                    <p class="subtitle" style="font-size: 0.95rem;">You can play all 4 minigames + bonus round, or adjust below:</p>
+                    <div id="playlist-container">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <div style="margin-top: 24px;">
+                    <button class="btn btn-success" id="btn-start-game" onclick="startGame()">
+                        🚀 START GAME
+                    </button>
+                    <p id="start-hint" style="font-size: 0.85rem; color: #9ca3af; margin-top: 8px; text-align: center;">
+                        (Tip: You can start with 1+ players to test, or wait for friends to join!)
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Phase 2: INSTRUCTIONS -->
+    <section id="phase-instructions" class="card" style="display: none; text-align: center;">
+        <span class="tag tag-bot" id="instructions-round-tag">Round 1</span>
+        <h2 id="instructions-game-title" style="font-size: 2.2rem; margin: 16px 0;">Minigame Title</h2>
+        <div class="card" style="background: #0f172a; max-width: 700px; margin: 20px auto; padding: 28px;">
+            <p id="instructions-text" style="font-size: 1.4rem; line-height: 1.6;"></p>
+        </div>
+        <div style="margin-top: 20px; color: var(--text-secondary); font-size: 1.1rem;">
+            Starting in <span id="instructions-timer" style="font-weight: 700; color: #60a5fa;">8</span>s...
+        </div>
+    </section>
+
+    <!-- Phase 3: SUBMITTING -->
+    <section id="phase-submitting" class="card" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <div>
+                <span class="tag tag-bot" id="submitting-round-tag">Round</span>
+                <span id="submitting-game-title" style="font-weight: 700; color: #9ca3af; margin-left: 8px;"></span>
+            </div>
+            <div class="timer-pill" id="host-submitting-timer-box">
+                ⏱️ <span id="submitting-timer">25</span>s
+            </div>
+        </div>
+
+        <div class="prompt-banner" id="submitting-prompt-text">
+            Prompt goes here...
+        </div>
+
+        <div id="submitting-captcha-box" class="captcha-image-display" style="display: none;">
+            <img id="submitting-captcha-img" src="" alt="CAPTCHA Challenge">
+        </div>
+
+        <h3 style="margin-top: 24px;">Player Submissions</h3>
+        <p class="subtitle">Waiting for everyone to submit before the timer expires...</p>
+        <div class="player-list" id="submitting-players-list"></div>
+    </section>
+
+    <!-- Phase 4: VOTING -->
+    <section id="phase-voting" class="card" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div>
+                <span class="tag tag-bot">VOTING PHASE</span>
+                <span id="voting-game-title" style="font-weight: 700; color: #9ca3af; margin-left: 8px;"></span>
+            </div>
+            <div class="timer-pill" id="host-voting-timer-box">
+                ⏱️ <span id="voting-timer">25</span>s
+            </div>
+        </div>
+        <h2 style="font-size: 1.8rem; text-align: center; margin-bottom: 6px;" id="voting-header-title">Which Response is the BOT?</h2>
+        <p class="subtitle" style="text-align: center;" id="voting-header-subtitle">Vote on your phones now!</p>
+
+        <div class="options-grid" id="voting-options-grid"></div>
+
+        <h3 style="margin-top: 28px;">Live Voting Status</h3>
+        <div class="player-list" id="voting-players-list"></div>
+    </section>
+
+    <!-- Phase 5: REVEAL -->
+    <section id="phase-reveal" class="card" style="display: none;">
+        <h2 style="font-size: 2rem; text-align: center; margin-bottom: 6px;">The Reveal!</h2>
+        <p class="subtitle" style="text-align: center;">Let's see which responses were generated by a BOT vs a HUMAN...</p>
+
+        <div id="reveal-cards-container"></div>
+
+        <div style="text-align: center; margin-top: 24px; color: var(--text-secondary);">
+            Advancing in <span id="reveal-timer" style="font-weight: 700; color: #60a5fa;">10</span>s...
+        </div>
+    </section>
+
+    <!-- Phase 6: SCOREBOARD -->
+    <section id="phase-scoreboard" class="card" style="display: none;">
+        <h2 style="font-size: 2rem; text-align: center; margin-bottom: 8px;">🔒 Evaluation Standings (Classified)</h2>
+        <p class="subtitle" style="text-align: center; max-width: 650px; margin: 0 auto 20px;">
+            Scores are strictly encrypted by the Organization until the final evaluation to keep author identities completely secret!
+        </p>
+        <table class="scoreboard-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Player</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody id="scoreboard-body"></tbody>
+        </table>
+
+        <div style="text-align: center; margin-top: 28px; color: var(--text-secondary);">
+            Next round starting in <span id="scoreboard-timer" style="font-weight: 700; color: #60a5fa;">8</span>s...
+        </div>
+    </section>
+
+    <!-- Phase 7: BONUS ROUND -->
+    <section id="phase-bonus" class="card" style="display: none;">
+        <span class="tag tag-bot">FINAL BONUS ROUND</span>
+        <h2 style="font-size: 2rem; margin: 12px 0;">The Human Dossier</h2>
+        <p class="subtitle">Every response from previous rounds has been assembled into dossiers. Players are matching dossiers to humans on their phones!</p>
+
+        <div id="bonus-dossiers-preview" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;"></div>
+
+        <h3 style="margin-top: 24px;">Player Guess Status</h3>
+        <div class="player-list" id="bonus-players-list"></div>
+    </section>
+
+    <!-- Phase 8: BONUS REVEAL -->
+    <section id="phase-bonus-reveal" class="card" style="display: none;">
+        <h2 style="font-size: 2rem; text-align: center; margin-bottom: 16px;">Bonus Round Reveal!</h2>
+        <div id="bonus-reveal-container"></div>
+        <div style="text-align: center; margin-top: 24px; color: var(--text-secondary);">
+            Revealing the champion in <span id="bonus-reveal-timer" style="font-weight: 700; color: #60a5fa;">10</span>s...
+        </div>
+    </section>
+
+    <!-- Phase 9: GAME OVER -->
+    <section id="phase-game-over" class="card" style="display: none; text-align: center;">
+        <h1 style="font-size: 3rem; margin-bottom: 10px;">👑 GAME OVER 👑</h1>
+        <div id="winner-announcement" style="margin: 24px auto; max-width: 600px; padding: 24px; background: #1e3a8a; border-radius: 12px;">
+            <h2 id="winner-name" style="font-size: 2.4rem; color: #fbbf24;">Champion</h2>
+            <p id="winner-score" style="font-size: 1.4rem; color: #93c5fd;">Total Score: 0</p>
+        </div>
+
+        <table class="scoreboard-table" style="max-width: 600px; margin: 0 auto 24px;">
+            <thead>
+                <tr>
+                    <th>Final Rank</th>
+                    <th>Player</th>
+                    <th>Score</th>
+                </tr>
+            </thead>
+            <tbody id="gameover-scoreboard-body"></tbody>
+        </table>
+
+        <button class="btn btn-primary" style="max-width: 300px; margin: 20px auto;" onclick="resetToLobby()">
+            Play Again
+        </button>
+    </section>
+</div>
+
+<!-- Subtle host control bar at bottom (for manually skipping timers or resetting if needed) -->
+<div class="host-controls" id="host-controls-bar">
+    <span id="auto-pilot-indicator" style="align-self: center; font-size: 0.85rem; color: #9ca3af; margin-right: auto;">
+        🟢 Auto-pilot active (no host clicks required)
+    </span>
+    <button class="btn btn-secondary btn-sm" onclick="advancePhase()" id="btn-skip-phase">
+        ⏩ Next / Skip Timer
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="resetToLobby()" id="btn-reset-lobby">
+        🔄 Reset to Lobby
+    </button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/host.js?v={{ v }}"></script>
+{% endblock %}

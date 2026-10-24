@@ -1,0 +1,9 @@
+flask>=3.0.0
+qrcode>=8.0
+pillow>=10.0.0
+requests>=2.31.0
+numpy>=1.24.0
+
+# Optional dependencies for ML/AttnGAN captcha generation:
+# torch
+# torchvision

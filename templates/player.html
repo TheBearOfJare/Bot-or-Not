@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Bot or Not - Player Controller{% endblock %}
+
+{% block content %}
+<div class="mobile-container">
+    <div class="mobile-header">
+        <h2 style="font-size: 1.4rem; margin: 0;">🤖 Bot or Not</h2>
+        <div id="player-status-bar" style="display: none; margin-top: 4px;">
+            <span style="font-weight: 700; color: #f3f4f6;" id="player-display-name">Player</span>
+            <span class="player-score-tag" id="player-display-score">0 pts</span>
+        </div>
+    </div>
+
+    <!-- Screen 1: Join / Register -->
+    <div id="screen-join" class="card">
+        <h3>Join the Game</h3>
+        <p class="subtitle">Enter your name to jump in:</p>
+        <form id="join-form" onsubmit="handleJoin(event)">
+            <input type="text" id="player-name-input" placeholder="Your name / nickname" maxlength="18" required autofocus>
+            <button type="submit" class="btn btn-primary" id="btn-join">Join Game</button>
+        </form>
+    </div>
+
+    <!-- Screen 2: Waiting in Lobby -->
+    <div id="screen-lobby" class="card status-waiting" style="display: none;">
+        <div class="spinner"></div>
+        <h3>You're In!</h3>
+        <p id="lobby-wait-text" style="margin-top: 8px;">Waiting for the host to start the game on the TV screen...</p>
+        <div style="margin-top: 24px;">
+            <a href="#" onclick="leaveGame(event)" style="color: #9ca3af; font-size: 0.85rem; text-decoration: underline;">
+                Need to change nickname? Tap to re-join
+            </a>
+        </div>
+    </div>
+
+    <!-- Screen 3: Instructions -->
+    <div id="screen-instructions" class="card" style="display: none; text-align: center;">
+        <span class="tag tag-bot" style="margin-bottom: 12px;">Get Ready!</span>
+        <h3 id="player-inst-title" style="font-size: 1.4rem;">Minigame Title</h3>
+        <p id="player-inst-text" style="color: #d1d5db; margin: 16px 0; font-size: 1.05rem;"></p>
+        <div class="spinner" style="width: 28px; height: 28px;"></div>
+        <p style="color: #9ca3af; font-size: 0.9rem;">Round starting in a moment...</p>
+    </div>
+
+    <!-- Screen 4: Submitting -->
+    <div id="screen-submitting" class="card" style="display: none;">
+        <!-- If not yet submitted -->
+        <div id="submitting-form-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 id="prompt-heading" style="color: #60a5fa; font-size: 1.25rem; margin: 0;">Prompt</h3>
+                <div class="timer-pill" id="player-submit-timer" style="padding: 2px 10px; font-size: 0.95rem;">
+                    ⏱️ <span id="player-submit-seconds">25</span>s
+                </div>
+            </div>
+            
+            <div id="player-captcha-preview" class="captcha-image-display" style="display: none; margin: 12px 0;">
+                <img id="player-captcha-img" src="" alt="CAPTCHA Image" style="max-width: 100%; border-radius: 8px;">
+            </div>
+
+            <!-- Single text input form -->
+            <div id="input-single-container" style="margin-top: 14px;">
+                <textarea id="single-response-input" rows="3" placeholder="Type your response here..."></textarea>
+            </div>
+
+            <!-- 3-field input for Survey Says -->
+            <div id="input-multi-container" style="display: none; margin-top: 14px;">
+                <input type="text" id="survey-input-1" placeholder="Top Answer #1">
+                <input type="text" id="survey-input-2" placeholder="Top Answer #2">
+                <input type="text" id="survey-input-3" placeholder="Top Answer #3">
+            </div>
+
+            <button class="btn btn-success" id="btn-submit-answer" onclick="submitAnswer()">
+                Lock In Answer
+            </button>
+        </div>
+
+        <!-- If already submitted -->
+        <div id="submitting-done-container" class="status-waiting" style="display: none;">
+            <div style="font-size: 2.5rem; margin-bottom: 10px;">✅</div>
+            <h3>Answer Locked In!</h3>
+            <p style="margin-top: 8px;">Waiting for other players or timer...</p>
+        </div>
+    </div>
+
+    <!-- Screen 5: Voting -->
+    <div id="screen-voting" class="card" style="display: none;">
+        <!-- If not yet voted -->
+        <div id="voting-choices-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <h3 style="color: #ef4444; font-size: 1.2rem; margin: 0;" id="player-voting-title">Which one is the BOT?</h3>
+                <div class="timer-pill" id="player-vote-timer" style="padding: 2px 10px; font-size: 0.95rem;">
+                    ⏱️ <span id="player-vote-seconds">25</span>s
+                </div>
+            </div>
+            <p class="subtitle" id="player-voting-subtitle" style="font-size: 0.95rem; margin-bottom: 14px;">
+                Pick the response you think was generated by an AI:
+            </p>
+            <div id="player-voting-options"></div>
+            <button class="btn btn-primary" id="btn-lock-multi-votes" style="display: none; margin-top: 14px;" onclick="submitMultiVotes()">
+                Lock In Votes (0/2)
+            </button>
+        </div>
+
+        <!-- If already voted -->
+        <div id="voting-done-container" class="status-waiting" style="display: none;">
+            <div style="font-size: 2.5rem; margin-bottom: 10px;">🗳️</div>
+            <h3>Vote Locked In!</h3>
+            <p style="margin-top: 8px;">Look up at the TV screen for the reveal!</p>
+        </div>
+    </div>
+
+    <!-- Screen 6: Generic TV Watch Screen (Reveal, Scoreboard, etc.) -->
+    <div id="screen-watch-tv" class="card status-waiting" style="display: none;">
+        <div style="font-size: 2.8rem; margin-bottom: 12px;">📺</div>
+        <h3 id="watch-tv-title">Look at the TV!</h3>
+        <p id="watch-tv-desc" style="margin-top: 8px; color: #9ca3af;">Scores and reveals are happening on the main screen.</p>
+        <div id="player-round-score-notice" style="margin-top: 16px; font-weight: 700; color: #34d399;"></div>
+    </div>
+
+    <!-- Screen 7: Final Bonus Round Matching -->
+    <div id="screen-bonus" class="card" style="display: none;">
+        <div id="bonus-form-container">
+            <h3 style="color: #fbbf24;">The Human Dossier</h3>
+            <p class="subtitle" style="font-size: 0.95rem;">Match each set of responses to the human who wrote them:</p>
+            <div id="bonus-dossiers-list"></div>
+            <button class="btn btn-primary" style="margin-top: 14px;" onclick="submitBonusMatches()">
+                Submit Guesses
+            </button>
+        </div>
+
+        <div id="bonus-done-container" class="status-waiting" style="display: none;">
+            <div style="font-size: 2.5rem; margin-bottom: 10px;">🕵️</div>
+            <h3>Guesses Locked In!</h3>
+            <p style="margin-top: 8px;">Watch the TV screen for the final identity reveal!</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/player.js?v={{ v }}"></script>
+{% endblock %}
