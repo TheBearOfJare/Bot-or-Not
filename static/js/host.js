@@ -221,9 +221,9 @@ function renderSubmitting(state, isNewPhase) {
     if (state.submissions_status) {
         list.innerHTML = state.submissions_status.map(p => `
             <div class="player-badge ${p.has_submitted ? 'ready' : 'pending'}">
-                <span>${p.has_submitted ? '✅' : '✍️'}</span>
+                <span>${p.has_submitted ? '✅' : (p.has_draft ? '✍️' : '💭')}</span>
                 <span>${escapeHtml(p.name)}</span>
-                <span style="font-size: 0.85rem; color: #9ca3af;">${p.has_submitted ? 'Submitted' : 'Typing...'}</span>
+                <span style="font-size: 0.85rem; color: #9ca3af;">${p.has_submitted ? 'Submitted' : (p.has_draft ? 'Typing...' : 'Thinking...')}</span>
             </div>
         `).join("");
     }

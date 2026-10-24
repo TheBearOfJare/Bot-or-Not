@@ -27,9 +27,9 @@ class CaptchaCaptionGame(BaseMinigame):
             "title": prompt_info.get("title", "Security Verification"),
             "description": self.chosen_prompt,
             "fallbacks": [
-                "A glitchy scene captured on an old security camera.",
-                "Looks like an everyday street scene that melted in the microwave.",
-                "A colorful abstract puzzle that somehow passes as a CAPTCHA."
+                "Looks like a street scene",
+                "Car parked on the road",
+                "Blurry scene with an animal"
             ]
         })
         
@@ -69,10 +69,13 @@ class CaptchaCaptionGame(BaseMinigame):
                 "author_id": bot_id,
                 "author_name": bot_name,
                 "is_bot": True,
-                "response": caption
+                "response": caption,
+                "is_locked": True,
+                "version": 0
             }
 
     def _get_fallback_response(self) -> str:
         if self.chosen_subject and self.chosen_subject.get("fallbacks"):
-            return random.choice(self.chosen_subject["fallbacks"])
-        return "A weird, crunchy image of an unusual scene."
+            chosen = random.choice(self.chosen_subject["fallbacks"])
+            return chosen[0].upper() + chosen[1:] if chosen else ""
+        return "Looks like a cat on a car"

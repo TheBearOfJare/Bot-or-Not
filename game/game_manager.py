@@ -135,14 +135,17 @@ class GameManager:
                     self.phase = "SUBMITTING"
 
             elif self.phase == "SUBMITTING":
-                # If any player timed out without submitting, insert timeout placeholder
+                # Finalize any pending drafts or timeout placeholders
                 if self.current_game and hasattr(self.current_game, "submissions"):
-                    for pid, p in self.players.items():
-                        sub_id = f"sub_{pid}"
-                        if sub_id not in self.current_game.submissions:
-                            self.current_game.submit_player_response(
-                                pid, p["name"], "[Out of time - Blank submission]"
-                            )
+                    if hasattr(self.current_game, "finalize_submissions"):
+                        self.current_game.finalize_submissions(self.players)
+                    else:
+                        for pid, p in self.players.items():
+                            sub_id = f"sub_{pid}"
+                            if sub_id not in self.current_game.submissions:
+                                self.current_game.submit_player_response(
+                                    pid, p["name"], "[Out of time - Blank submission]", is_locked=True
+                                )
                 # Ensure bots are ready before entering VOTING!
                 if self.current_game and hasattr(self.current_game, "ensure_bots_ready"):
                     self.current_game.ensure_bots_ready(timeout=2.0)
@@ -204,15 +207,17 @@ class GameManager:
 
     # --- Player Action Handlers ---
 
-    def handle_player_submission(self, player_id: str, response_text: Any) -> bool:
+    def handle_player_submission(self, player_id: str, response_text: Any, is_locked: bool = True, version: int = 0) -> bool:
         with self.lock:
             if self.phase != "SUBMITTING" or not self.current_game:
                 return False
             p_name = self.players.get(player_id, {}).get("name", "Unknown")
-            ok = self.current_game.submit_player_response(player_id, p_name, response_text)
+            ok = self.current_game.submit_player_response(
+                player_id, p_name, response_text, is_locked=is_locked, version=version
+            )
             
-            # Auto-advance if all human players submitted
-            if ok and self.current_game.are_submissions_complete(list(self.players.keys())):
+            # Auto-advance if all human players submitted AND locked in
+            if ok and is_locked and self.current_game.are_submissions_complete(list(self.players.keys())):
                 self.next_phase(expected_phase="SUBMITTING")
             return ok
 
@@ -300,11 +305,20 @@ class GameManager:
 
         # Submissions status
         if self.phase == "SUBMITTING" and self.current_game:
-            submitted_ids = {
-                sub["author_id"] for sub in self.current_game.submissions.values() if not sub["is_bot"]
+            locked_ids = {
+                sub["author_id"] for sub in self.current_game.submissions.values()
+                if not sub["is_bot"] and sub.get("is_locked", False)
+            }
+            drafting_ids = {
+                sub["author_id"] for sub in self.current_game.submissions.values()
+                if not sub["is_bot"] and not sub.get("is_locked", False)
             }
             base_state["submissions_status"] = [
-                {"name": p["name"], "has_submitted": p["id"] in submitted_ids}
+                {
+                    "name": p["name"],
+                    "has_submitted": p["id"] in locked_ids,
+                    "has_draft": p["id"] in drafting_ids
+                }
                 for p in self.players.values()
             ]
 
@@ -373,9 +387,12 @@ class GameManager:
 
         elif self.phase == "SUBMITTING" and self.current_game:
             sub_id = f"sub_{player_id}"
-            has_submitted = sub_id in self.current_game.submissions
+            sub = self.current_game.submissions.get(sub_id)
+            has_submitted = sub.get("is_locked", False) if sub else False
             state["has_submitted"] = has_submitted
             state["prompt"] = self.current_game.get_prompt_for_player(player_id)
+            if sub and not has_submitted:
+                state["draft"] = sub.get("response")
             if has_submitted:
                 state["status_message"] = "Response submitted! Waiting for timer / others..."
 

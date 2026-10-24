@@ -16,7 +16,13 @@ let selectedVoteIds = [];
 let maxVotesRequired = 1;
 let bonusGuesses = {};
 
+// Draft auto-sync state
+let draftSyncTimer = null;
+let lastSentDraftJson = null;
+let lastDraftSentTime = 0;
+
 document.addEventListener("DOMContentLoaded", () => {
+    initInputListeners();
     if (playerId) {
         startPolling();
     } else {
@@ -173,6 +179,97 @@ function renderPlayerView(state) {
     }
 }
 
+// --- Real-time Draft Auto-Sync ---
+
+function getCurrentInputPayload() {
+    if (currentPromptType === "multi_field") {
+        const a1 = (document.getElementById("survey-input-1")?.value || "");
+        const a2 = (document.getElementById("survey-input-2")?.value || "");
+        const a3 = (document.getElementById("survey-input-3")?.value || "");
+        return [a1, a2, a3];
+    } else {
+        return (document.getElementById("single-response-input")?.value || "");
+    }
+}
+
+function onTextInputUpdate() {
+    if (currentPhaseCached !== "SUBMITTING" || !playerId) return;
+
+    const payload = getCurrentInputPayload();
+    const jsonStr = JSON.stringify(payload);
+    if (jsonStr === lastSentDraftJson) return;
+
+    const now = Date.now();
+    const timeSinceLast = now - lastDraftSentTime;
+    const THROTTLE_MS = 250;
+
+    clearTimeout(draftSyncTimer);
+
+    if (timeSinceLast >= THROTTLE_MS) {
+        sendDraftUpdate(payload);
+    } else {
+        draftSyncTimer = setTimeout(() => {
+            sendDraftUpdate(getCurrentInputPayload());
+        }, THROTTLE_MS - timeSinceLast);
+    }
+}
+
+async function sendDraftUpdate(payload) {
+    if (currentPhaseCached !== "SUBMITTING" || !playerId) return;
+    const jsonStr = JSON.stringify(payload);
+    lastSentDraftJson = jsonStr;
+    lastDraftSentTime = Date.now();
+
+    try {
+        await fetch("/api/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                player_id: playerId,
+                response: payload,
+                locked: false,
+                version: lastDraftSentTime
+            })
+        });
+    } catch (err) {
+        console.warn("Draft auto-sync warning:", err);
+    }
+}
+
+function flushDraftNow() {
+    if (currentPhaseCached === "SUBMITTING" && playerId) {
+        clearTimeout(draftSyncTimer);
+        const payload = getCurrentInputPayload();
+        sendDraftUpdate(payload);
+    }
+}
+
+function initInputListeners() {
+    const singleInput = document.getElementById("single-response-input");
+    if (singleInput) {
+        singleInput.addEventListener("input", onTextInputUpdate);
+        singleInput.addEventListener("change", onTextInputUpdate);
+        singleInput.addEventListener("blur", flushDraftNow);
+    }
+
+    ["survey-input-1", "survey-input-2", "survey-input-3"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener("input", onTextInputUpdate);
+            el.addEventListener("change", onTextInputUpdate);
+            el.addEventListener("blur", flushDraftNow);
+        }
+    });
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") {
+            flushDraftNow();
+        }
+    });
+
+    window.addEventListener("pagehide", flushDraftNow);
+}
+
 // --- Submitting Phase ---
 function renderSubmittingScreen(state, isPhaseChanged) {
     showScreen("screen-submitting");
@@ -181,6 +278,7 @@ function renderSubmittingScreen(state, isPhaseChanged) {
 
     if (state.has_submitted) {
         clearInterval(playerCountdown);
+        clearTimeout(draftSyncTimer);
         formBox.style.display = "none";
         doneBox.style.display = "block";
         return;
@@ -201,6 +299,24 @@ function renderSubmittingScreen(state, isPhaseChanged) {
         document.getElementById("survey-input-1").value = "";
         document.getElementById("survey-input-2").value = "";
         document.getElementById("survey-input-3").value = "";
+        lastSentDraftJson = null;
+        lastDraftSentTime = 0;
+        clearTimeout(draftSyncTimer);
+    } else if (state.draft && !state.has_submitted) {
+        // Restore draft from server if input is currently empty (e.g. after phone refresh)
+        const singleInput = document.getElementById("single-response-input");
+        const s1 = document.getElementById("survey-input-1");
+        const s2 = document.getElementById("survey-input-2");
+        const s3 = document.getElementById("survey-input-3");
+        if (currentPromptType === "multi_field" && Array.isArray(state.draft)) {
+            if (!s1.value && !s2.value && !s3.value) {
+                s1.value = state.draft[0] || "";
+                s2.value = state.draft[1] || "";
+                s3.value = state.draft[2] || "";
+            }
+        } else if (typeof state.draft === "string" && !singleInput.value) {
+            singleInput.value = state.draft;
+        }
     }
 
     // Start 25s submit timer
@@ -236,6 +352,8 @@ function renderSubmittingScreen(state, isPhaseChanged) {
 }
 
 async function submitAnswer(isAutoTimeout = false) {
+    clearTimeout(draftSyncTimer);
+
     let payload = null;
     if (currentPromptType === "multi_field") {
         const a1 = document.getElementById("survey-input-1").value.trim();
@@ -257,11 +375,23 @@ async function submitAnswer(isAutoTimeout = false) {
 
     clearInterval(playerCountdown);
 
+    const formBox = document.getElementById("submitting-form-container");
+    const doneBox = document.getElementById("submitting-done-container");
+    if (formBox && doneBox) {
+        formBox.style.display = "none";
+        doneBox.style.display = "block";
+    }
+
     try {
         const res = await fetch("/api/submit", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ player_id: playerId, response: payload })
+            body: JSON.stringify({
+                player_id: playerId,
+                response: payload,
+                locked: true,
+                version: Date.now()
+            })
         });
         const data = await res.json();
         if (data.success) {

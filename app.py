@@ -98,11 +98,15 @@ def api_submit():
     data = request.get_json(silent=True) or {}
     player_id = data.get("player_id") or session.get("player_id")
     response_val = data.get("response")
+    is_locked = bool(data.get("locked", True))
+    version = data.get("version", 0)
     
     if not player_id or response_val is None:
         return jsonify({"success": False, "error": "Missing player_id or response"}), 400
         
-    ok = game_manager.handle_player_submission(player_id, response_val)
+    ok = game_manager.handle_player_submission(
+        player_id, response_val, is_locked=is_locked, version=version
+    )
     return jsonify({"success": ok})
 
 @app.route("/api/vote", methods=["POST"])

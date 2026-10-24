@@ -16,10 +16,10 @@ CAPTCHA_SUBJECTS = {
         "description": "an orange cat sitting on the roof of a parked red car under a streetlamp at night",
         "attngan_prompt": "a cat sitting on the roof of a parked red car on the street",
         "fallbacks": [
-            "An orange cat perched on top of a red car acting like it owns the vehicle.",
-            "Feline overlord refusing to pay parking fees while loafing on an automobile roof.",
-            "Someone parked their red sedan directly underneath a very judgmental cat.",
-            "A cat guarding a red car in the middle of the night under a street light."
+            "Orange cat on a red car",
+            "A cat sitting on a car",
+            "Cat on roof of a parked car",
+            "Orange cat sleeping on a car"
         ]
     },
     "ufo_abducting_cow": {
@@ -27,10 +27,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a flying saucer hovering in the sky using a glowing tractor beam to abduct a spotted cow from a field",
         "attngan_prompt": "a flying aircraft in the night sky over a cow standing in a grassy field",
         "fallbacks": [
-            "A UFO tractor-beaming a cow into outer space at midnight.",
-            "Extraterrestrials performing their routine dairy acquisition mission.",
-            "A flying saucer picking up a bovine hitchhiker with a neon beam.",
-            "Alien spaceship lifting a confused cow off the pasture."
+            "UFO beaming up a cow",
+            "Alien spaceship taking a cow",
+            "Cow getting abducted by a UFO",
+            "Flying saucer over a farm"
         ]
     },
     "dino_chasing_bus": {
@@ -38,10 +38,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a green dinosaur chasing a yellow school bus down a street past a stop sign",
         "attngan_prompt": "a large green animal chasing a yellow school bus down a street next to a stop sign",
         "fallbacks": [
-            "A T-Rex trying to catch the morning school bus because it missed its alarm.",
-            "Godzilla casually tailgating a yellow school bus in morning traffic.",
-            "Jurassic field trip gone horribly wrong on a suburban avenue.",
-            "A green dinosaur running after a yellow bus near a stop sign."
+            "Dinosaur chasing a school bus",
+            "T rex running after a bus",
+            "Green dino following a yellow bus",
+            "Dinosaur running in the street"
         ]
     },
     "bear_on_bike": {
@@ -49,10 +49,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a large brown bear riding a comically small bicycle across a pedestrian crosswalk",
         "attngan_prompt": "a large brown bear riding a small bicycle across a pedestrian crosswalk",
         "fallbacks": [
-            "A massive bear testing the weight limit of a miniature bicycle in the crosswalk.",
-            "Circus bear commuting to work on two tiny wheels.",
-            "A bear observing pedestrian crossing laws while balanced on a child's bike.",
-            "A big grizzly struggling to pedal a tiny two-wheeler."
+            "Bear riding a tiny bicycle",
+            "A bear on a bike",
+            "Bear riding a bike in the crosswalk",
+            "Grizzly bear on a small bike"
         ]
     },
     "hydrant_geyser_cat": {
@@ -60,10 +60,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a broken fire hydrant shooting a giant geyser of water into the air next to a wet cat running away on a sidewalk",
         "attngan_prompt": "a red fire hydrant spraying water into the air next to a wet cat running on a sidewalk",
         "fallbacks": [
-            "A municipal fire hydrant erupting like Old Faithful while a soaking wet cat flees the splash zone.",
-            "Total water pipe catastrophe turning the sidewalk into an unplanned waterpark.",
-            "A fire hydrant shooting a geyser of water high into the air while a cat panics.",
-            "Sidewalk fountain explosion soaking everything within a 20-foot radius."
+            "Fire hydrant spraying water on a cat",
+            "Cat running away from broken hydrant",
+            "Fire hydrant shooting water into the air",
+            "Cat getting sprayed by a fire hydrant"
         ]
     },
     "raccoon_trash_heist": {
@@ -71,10 +71,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a raccoon rummaging through a knocked-over trash can with garbage spilling onto the sidewalk under a street sign at night",
         "attngan_prompt": "a raccoon rummaging through a metal trash can on the sidewalk under a street sign at night",
         "fallbacks": [
-            "A trash panda conducting an aggressive midnight audit of someone's garbage can.",
-            "A raccoon caught red-handed tipping over a trash can by a stop sign.",
-            "Midnight dumpster diving operation in progress under the moon.",
-            "A bandit raccoon spilling trash bags all over the pavement."
+            "Raccoon knocking over a trash can",
+            "Raccoon digging through garbage",
+            "Raccoon in a trash can at night",
+            "Raccoon making a mess with trash"
         ]
     },
     "robot_walking_dog": {
@@ -82,10 +82,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a humanoid robot walking a mechanical dog on a leash past a traffic light in a futuristic city",
         "attngan_prompt": "a metallic robot walking a dog on a leash past a traffic light on a city street",
         "fallbacks": [
-            "A robot taking its dog for a walk while waiting for the traffic light to turn green.",
-            "Future municipal compliance: cyborg walking a mechanical canine down the sidewalk.",
-            "A tin can robot being dragged along by a dog under a street signal.",
-            "An android walking a pet in a pixelated cyberpunk downtown."
+            "Robot walking a dog",
+            "A robot walking a dog on a leash",
+            "Robot and dog waiting at traffic light",
+            "Silver robot walking a pet"
         ]
     },
     "ufo_at_red_light": {
@@ -93,10 +93,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a tiny alien spaceship stopped patiently at a red traffic light above a pedestrian crosswalk",
         "attngan_prompt": "a small vehicle stopped at a red traffic light above a pedestrian crosswalk",
         "fallbacks": [
-            "An extraterrestrial spaceship actually obeying municipal traffic signals.",
-            "Alien in a flying saucer stuck at a red light in rush hour traffic.",
-            "Even intergalactic travelers have to wait for the light to turn green.",
-            "A mini UFO hovering quietly above a pedestrian crosswalk."
+            "UFO stopped at a red light",
+            "Flying saucer waiting at a stop light",
+            "Alien spaceship at a traffic light",
+            "UFO hovering above a crosswalk"
         ]
     },
     "cat_blocking_traffic": {
@@ -104,10 +104,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a giant lazy cat sprawled across the road blocking a yellow school bus and traffic",
         "attngan_prompt": "a giant orange cat lying across the street blocking a yellow bus and cars",
         "fallbacks": [
-            "Major traffic standstill caused by a gigantic cat taking an afternoon nap across both lanes.",
-            "School bus halted by a furry feline roadblock refusing to budge.",
-            "The most effective speed bump ever: an enormous sleeping cat on the asphalt.",
-            "A massive cat taking a nap across the entire street while cars wait."
+            "Giant cat blocking the road",
+            "Huge cat sleeping in front of a bus",
+            "Big cat laying in the street",
+            "Massive cat blocking traffic"
         ]
     },
     "snowman_campfire": {
@@ -115,10 +115,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a snowman standing next to a crackling campfire in the snow, beginning to melt under the night sky",
         "attngan_prompt": "a white snowman standing next to a burning campfire in the snow at night",
         "fallbacks": [
-            "A snowman making the questionable life choice of warming up next to a blazing campfire.",
-            "Frosty discovering the tragic laws of thermodynamics by a campfire.",
-            "A snowman enjoying a cozy fire until realizing it is melting into a puddle.",
-            "Melting snowman chilling by a campsite fire in the woods."
+            "Snowman melting next to a campfire",
+            "Snowman sitting by a fire",
+            "Melting snowman next to a fire",
+            "Snowman standing near a campfire"
         ]
     },
     "shark_in_flood": {
@@ -126,10 +126,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a flooded street with a shark fin swimming around a submerged stop sign during a rainstorm",
         "attngan_prompt": "a flooded city street with deep water and a stop sign during a rainstorm",
         "fallbacks": [
-            "Flash flood warning upgraded to shark warning near the flooded stop sign.",
-            "A shark swimming down main street during a torrential downpour.",
-            "Street flooding so bad that aquatic apex predators have moved into the bike lane.",
-            "A shark fin cruising past a stop sign in ankle-deep flood water."
+            "Shark fin in a flooded street",
+            "Shark swimming next to a stop sign",
+            "Shark in deep water on a road",
+            "Shark fin swimming down the street"
         ]
     },
     "wizard_summoning_pizza": {
@@ -137,10 +137,10 @@ CAPTCHA_SUBJECTS = {
         "description": "a wizard with a pointy hat and staff casting a spell to summon a giant slice of pizza from a thundercloud",
         "attngan_prompt": "a person wearing a pointy hat with a giant slice of pizza in the sky",
         "fallbacks": [
-            "A wizard using forbidden arcane magic to conjure midnight pepperoni pizza.",
-            "Sorcerer striking lightning from the sky to manifest a giant pizza slice.",
-            "Ancient spellcasting solely dedicated to avoiding delivery fees.",
-            "A wizard on a rooftop summoning celestial junk food during a storm."
+            "Wizard summoning a giant pizza",
+            "Wizard holding pizza in the sky",
+            "Wizard casting a spell with pizza",
+            "Wizard conjuring a giant pizza slice"
         ]
     }
 }

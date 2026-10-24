@@ -5,46 +5,46 @@ REVIEW_PRODUCTS = [
     {
         "product": "A standard yellow No. 2 pencil",
         "fallbacks": [
-            "Erased my hopes and dreams along with my spelling mistakes. Lead snapped instantaneously.",
-            "Contains too much graphite. Lacks Bluetooth connectivity and requires manual sharpening.",
-            "The yellow paint gave my fingers existential dread. Refuses to write in italics.",
-            "Only writes in dark grey. I wanted vibrant cybernetic cyan."
+            "Lead broke immediately",
+            "Eraser just smudged everything into a black smear",
+            "Snapped in half on first use",
+            "Worst pencil ever, constantly broke"
         ]
     },
     {
         "product": "A lukewarm bottle of municipal tap water",
         "fallbacks": [
-            "Tasted like liquid disappointment and old pipes. Wetness was aggressive and uncalled for.",
-            "Hydration was mediocre. Water refused to stay frozen at room temperature.",
-            "Zero flavor, zero sparkle, just straight condensation on my carpet.",
-            "H2O ratio feels counterfeit. 0/10 would not recommend to biological organisms."
+            "Tastes like straight rust and old pipes",
+            "Was literally warm and gross",
+            "Tastes like hose water",
+            "Zero stars, just drink from a puddle"
         ]
     },
     {
         "product": "A 12-inch clear plastic ruler",
         "fallbacks": [
-            "I tried to measure my patience with this seller and ran out of inches.",
-            "So clear I lost it on the desk for four days. Failed to bend without threatening to shatter.",
-            "Metric on one side, imperial on the other. It refuses to pick a political ideology.",
-            "Cannot measure emotional distance between my spouse and me."
+            "Snapped in my backpack on day one",
+            "So clear I immediately lost it on my desk",
+            "Numbers rubbed off after one week",
+            "Sharp edges, cheap brittle plastic"
         ]
     },
     {
         "product": "A single brown cardboard box",
         "fallbacks": [
-            "My cat climbed in and now refuses to acknowledge my existence. Catastrophic product.",
-            "Cube dimensions were slightly non-Euclidean. Flaps refused to stay down without violent tape application.",
-            "Too boxy. Needs more aerodynamic curves.",
-            "Arrived empty. I paid for a box and received 99% air inside."
+            "Arrived crushed and soaked",
+            "Fell apart as soon as I picked it up",
+            "Literally just a flimsy piece of cardboard",
+            "Bottom ripped open and dropped everything"
         ]
     },
     {
         "product": "A pack of unscented paper napkins",
         "fallbacks": [
-            "Disintegrated upon contact with a single drop of salsa. Felt like wiping mouth with sorrow.",
-            "Absorbed nothing. Just smeared the barbecue sauce into a modern art piece across my face.",
-            "Felt like 40-grit sandpaper against my delicate human flesh.",
-            "Zero scent detected. I demand aromatic stimulation with my grease cleanup."
+            "Ripped immediately when wet",
+            "Felt like sandpaper on my face",
+            "Absorbed nothing and tore in half",
+            "Super thin and completely useless"
         ]
     }
 ]
@@ -86,10 +86,13 @@ class OneStarReviewGame(BaseMinigame):
                 "author_id": bot_id,
                 "author_name": bot_name,
                 "is_bot": True,
-                "response": review
+                "response": review,
+                "is_locked": True,
+                "version": 0
             }
 
     def _get_fallback_response(self) -> str:
         if self.chosen_product and self.chosen_product.get("fallbacks"):
-            return random.choice(self.chosen_product["fallbacks"])
-        return "Absolute waste of money. Failed all baseline expectations."
+            chosen = random.choice(self.chosen_product["fallbacks"])
+            return chosen[0].upper() + chosen[1:] if chosen else ""
+        return "Broke immediately, waste of money"

@@ -31,20 +31,90 @@ class BotEngine:
         except Exception as e:
             print(f"[BotEngine] Ollama pre-warm note: {e} (will use fallbacks if Ollama is offline)")
 
-    def query_ollama(self, prompt: str, system_prompt: str = "", image_path: str = None, num_predict: int = 60) -> str:
+    def clean_human_response(self, text: str, max_words: int = 8, strip_final_period: bool = True) -> str:
+        """
+        Cleans and post-processes LLM output to match real human player behavior:
+        - Real humans under a 25s timer type brief, casual phrases (under 8 words).
+        - Strips AI prefix chatter ('Punchline:', 'Review:', 'It looks like', etc.).
+        - Keeps only the first sentence or clause (no long, theatrical essays).
+        - Strips quotes, markdown, and excessive punctuation.
+        - Truncates strictly to max_words without trailing punctuation.
+        """
+        if not text:
+            return ""
+
+        raw = text.strip()
+        # Remove markdown, quotes, backticks
+        raw = raw.replace('"', '').replace('`', '').strip()
+
+        # If multiple lines, only take the first non-empty line
+        lines = [line.strip() for line in raw.splitlines() if line.strip()]
+        if lines:
+            raw = lines[0]
+
+        # Strip prefixes iteratively (e.g. "Here is a guess: looks like an orange cat" -> "orange cat")
+        prefixes_to_strip = [
+            "here is a guess:", "here is my guess:", "here is:", "here's:",
+            "1-star review:", "1 star review:", "1-star review", "1 star review",
+            "review:", "review -", "review",
+            "punchline:", "punchline -", "punchline –",
+            "caption:", "caption -", "answer:", "response:",
+            "my guess is:", "my guess is", "my guess:", "guess:",
+            "it looks like a", "it looks like an", "it looks like",
+            "looks like a", "looks like an", "looks like",
+            "it seems to be a", "it seems to be",
+            "it appears to be a", "it appears to be",
+            "i think it's a", "i think it's an", "i think it's", "i think it is", "i think",
+            "i see a", "i see an", "i see",
+            "because:", "because "
+        ]
+        prefixes_to_strip.sort(key=len, reverse=True)
+        changed = True
+        while changed:
+            changed = False
+            lowered = raw.lower().strip()
+            for p in prefixes_to_strip:
+                if lowered.startswith(p):
+                    raw = raw.strip()[len(p):].strip(" :-\t\n\r\"\'`#")
+                    changed = True
+                    break
+
+        # Take only the first sentence / clause
+        for delimiter in [". ", "! ", "? ", "; "]:
+            if delimiter in raw:
+                raw = raw.split(delimiter)[0].strip()
+
+        # Enforce max word limit
+        words = raw.split()
+        if len(words) > max_words:
+            raw = " ".join(words[:max_words])
+
+        # Strip final period if desired (phone users rarely type ending periods in rapid games)
+        if strip_final_period and raw.endswith("."):
+            raw = raw[:-1].strip()
+
+        raw = raw.rstrip(",;:- ")
+        cleaned = raw.strip('"`\'*# ')
+        # Capitalize first letter to match phone keyboard auto-capitalization
+        if cleaned:
+            cleaned = cleaned[0].upper() + cleaned[1:]
+        return cleaned
+
+    def query_ollama(self, prompt: str, system_prompt: str = "", image_path: str = None, num_predict: int = 25) -> str:
         """
         Attempts to call the local Ollama instance with optional Vision input.
         Uses think=False to disable chain-of-thought overhead for sub-second responses.
+        Uses lower temperature (0.7) and tight num_predict to keep responses snappy and human-length.
         """
         try:
             payload = {
                 "model": self.model,
                 "prompt": prompt,
-                "system": system_prompt or "You are playing a party game where you try to write short, casual, human-like responses.",
+                "system": system_prompt or "You are a human playing a fast party game on your phone with friends under a 20-second timer. You type quick, short, casual, and believable responses. You never write essays, and you never try too hard to be funny.",
                 "stream": False,
                 "think": False,
                 "options": {
-                    "temperature": 0.85,
+                    "temperature": 0.7,
                     "num_predict": num_predict
                 }
             }
@@ -82,48 +152,59 @@ class BotEngine:
 
     def generate_pun_punchline(self, pun_setup: str, fallback_answers: list = None) -> str:
         prompt = (
-            f"You are a player in a game, trying to complete puns. "
-            f"The prompt is: '{pun_setup}'. "
-            f"Provide ONLY the punchline/completion for this pun in 1-8 words. "
-            f"Do not include explanations, thinking, or extra text."
+            f"You are playing a fast party game on your phone with friends under a 20-second timer.\n"
+            f"Prompt: '{pun_setup}'\n"
+            f"Complete this pun in 2 to 6 words max (e.g. 'no guts', 'they don't have the guts', 'it lost its baggage').\n"
+            f"Write ONLY the punchline completion. Keep it short, punchy, and casual. No quotes, no explanations."
         )
-        sys_prompt = "You write humorous, witty, or ironic punchlines to puns."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=35)
+        sys_prompt = "You type quick 2-6 word casual punchlines for a party game on your phone."
+        ans = self.query_ollama(prompt, sys_prompt, num_predict=15)
         if ans:
-            return ans
+            cleaned = self.clean_human_response(ans, max_words=7)
+            if cleaned:
+                return cleaned
         if fallback_answers:
-            return random.choice(fallback_answers)
-        return "Because it computed zero sense!"
+            chosen = random.choice(fallback_answers)
+            return chosen[0].upper() + chosen[1:] if chosen else ""
+        return "They don't have the guts"
 
     def generate_review(self, product_name: str, fallback_answers: list = None) -> str:
         prompt = (
-            f"You are writing a 1-star product review for '{product_name}'. "
-            f"Write 1-2 sentence fragments explaining why it is utterly terrible. "
-            f"Do not include quotes or review headers."
+            f"You are a human playing a rapid party game on your phone with 20 seconds to answer.\n"
+            f"Write a quick, blunt 1-star review for: '{product_name}'.\n"
+            f"Write ONE short, casual complaint in 3 to 7 words (e.g. 'Broke immediately', 'Cheap plastic garbage', 'Tasted like dirty tap water').\n"
+            f"Do not write paragraphs, do not try hard to be poetic or hilarious. Just sound like an annoyed person typing fast on a phone. No quotes."
         )
-        sys_prompt = "You are an angry, petty online reviewer leaving a 1-star complaint."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=65)
+        sys_prompt = "You type quick, blunt 3-7 word 1-star complaints on a phone keyboard."
+        ans = self.query_ollama(prompt, sys_prompt, num_predict=20)
         if ans:
-            return ans
+            cleaned = self.clean_human_response(ans, max_words=8)
+            if cleaned:
+                return cleaned
         if fallback_answers:
-            return random.choice(fallback_answers)
-        return f"Absolute waste of money. {product_name} failed all baseline expectations."
+            chosen = random.choice(fallback_answers)
+            return chosen[0].upper() + chosen[1:] if chosen else ""
+        return "Broke immediately, waste of money"
 
     def generate_survey_answers(self, survey_prompt: str, fallback_answers: list = None) -> list:
         prompt = (
-            f"Family Feud style game. Prompt: '{survey_prompt}'. "
-            f"List exactly 3 distinct answers separated by commas. "
-            f"Example: Answer 1, Answer 2, Answer 3. Nothing else."
+            f"Family Feud party game. You have 20 seconds on your phone to submit 3 answers.\n"
+            f"Prompt: '{survey_prompt}'\n"
+            f"Give exactly 3 common answers separated by commas.\n"
+            f"Keep each answer very short. (e.g. 'Traffic, Overslept, Flat tire').\n"
+            f"Output ONLY the 3 answers separated by commas. No numbering, no extra text."
         )
-        sys_prompt = "Provide 3 concise answers separated by commas."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=45)
+        sys_prompt = "You are playing family feud. Provide what you think are the top 3 answers to the survey question separated by commas."
+        ans = self.query_ollama(prompt, sys_prompt, num_predict=25)
         if ans:
-            parts = [p.strip().strip('"\'') for p in ans.split(",") if p.strip()]
+            parts = [self.clean_human_response(p, max_words=3, strip_final_period=True) for p in ans.split(",") if p.strip()]
+            parts = [p for p in parts if p]
             if len(parts) >= 3:
                 return parts[:3]
         if fallback_answers and len(fallback_answers) >= 3:
-            return random.sample(fallback_answers, 3)
-        return ["My algorithm", "Syntax errors", "Rebooting the server"]
+            chosen = random.sample(fallback_answers, 3)
+            return [x[0].upper() + x[1:] if x else "" for x in chosen]
+        return ["Traffic", "Overslept", "Car trouble"]
 
     def generate_dynamic_captcha_prompt(self) -> dict:
         """
@@ -184,20 +265,20 @@ class BotEngine:
         """
         Feeds ONLY the raw image to Ollama Vision with NO text spoilers or hints.
         The bot is strictly forced to interpret what it sees directly from the image.
-        Uses a confident, casual guessing prompt to maximize descriptive guesses without refusals.
+        Uses a quick, casual guessing prompt fitting a human player under a 20-second timer.
         """
         prompt = (
-            "Look at the attached image. You are playing a fun picture-guessing party game with friends.\n"
-            "Describe what this weird, glitchy picture looks like to you (objects, vehicles, animals, shapes, colors, or scene).\n"
-            "Give a confident, casual 1-sentence guess of what you see. 1 sentence max, minimal punctuation.\n"
-            "Do not apologize, do not say it is blurry or distorted, and never say you don't know—just give your best confident guess!"
+            "Look at the attached image. You are playing a rapid party game on your phone with 20 seconds on the clock.\n"
+            "Quickly name what you see in 3 to 7 words (e.g. 'cat on top of a red car' or 'dog next to a fire hydrant').\n"
+            "Keep it casual, direct, and simple. Do NOT try to make jokes, do not write a paragraph, do not say it is blurry."
         )
-        sys_prompt = "You are a casual player in an image-guessing party game. You always confidently name whatever objects, creatures, vehicles, or scene you see in the picture."
-        ans = self.query_ollama(prompt, sys_prompt, image_path=image_path, num_predict=45)
+        sys_prompt = "You type quick, direct 3-7 word descriptions of what you see in photos for a party game."
+        ans = self.query_ollama(prompt, sys_prompt, image_path=image_path, num_predict=20)
         if ans:
-            cleaned = ans.strip().strip('"\'*`\n').replace('"', '')
+            cleaned = self.clean_human_response(ans, max_words=8)
             if cleaned:
                 return cleaned
         if fallback_answers:
-            return random.choice(fallback_answers)
-        return "A weird colorful contraption on the street."
+            chosen = random.choice(fallback_answers)
+            return chosen[0].upper() + chosen[1:] if chosen else ""
+        return "Looks like a cat on a car"

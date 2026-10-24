@@ -1,50 +1,58 @@
 import random
-from typing import Any
+from typing import Any, Dict, List
 from game.minigames.base import BaseMinigame
 
 SURVEY_PROMPTS = [
     {
         "question": "Name something people pretend to understand just to look smart.",
         "fallbacks": [
-            "Wine notes / tannins",
-            "Modern abstract art",
-            "Cryptocurrency and blockchain",
+            "Wine tasting",
+            "Modern art",
+            "Crypto",
             "Quantum physics",
-            "The plot of Inception",
-            "Stock market options"
+            "Stock market",
+            "Philosophy",
+            "Classical music",
+            "Taxes"
         ]
     },
     {
         "question": "Name a terrible excuse for being an hour late to work.",
         "fallbacks": [
-            "My cat looked too comfortable sleeping on my legs",
-            "I forgot which day of the week it was",
-            "A flock of aggressive geese blocked my driveway",
-            "Alien abduction took longer than expected",
-            "I fell into a TikTok rabbit hole about competitive cheese rolling",
-            "My GPS had an emotional breakdown"
+            "Traffic",
+            "Overslept",
+            "Alarm didn't go off",
+            "Flat tire",
+            "Forgot my keys",
+            "Car wouldn't start",
+            "Spilled coffee",
+            "Lost track of time"
         ]
     },
     {
         "question": "Name something you should never do in a crowded elevator.",
         "fallbacks": [
-            "Eat a pungent egg salad sandwich with onions",
-            "Face backwards and stare deeply into strangers' eyes",
-            "Start vigorously stretching or doing jumping jacks",
-            "Announce 'I bet you're wondering why I gathered you here'",
-            "Press every single floor button while giggling",
-            "Take off your shoes and socks"
+            "Fart",
+            "Stare into someone's eyes",
+            "Eat smelly food",
+            "Talk loudly on phone",
+            "Press all the buttons",
+            "Cough without covering",
+            "Stand way too close",
+            "Sing loudly"
         ]
     },
     {
         "question": "Name a useless superpower that would actually be very annoying.",
         "fallbacks": [
-            "Hearing everyone's Wi-Fi passwords in your head",
-            "Sweating warm apple juice",
-            "Invisibility, but only when nobody is looking at you",
-            "Attracting stray pigeons wherever you walk",
-            "Speaking in reverse whenever you're nervous",
-            "Instant telekinesis, but it only moves paperclips 1 inch"
+            "Reading your own mind",
+            "Attracting pigeons",
+            "Tasting colors",
+            "Invisibility only when alone",
+            "Sweating juice",
+            "Floating one inch",
+            "Super smelling",
+            "Glowing in broad daylight"
         ]
     }
 ]
@@ -86,34 +94,87 @@ class SurveySaysGame(BaseMinigame):
                 "author_id": bot_id,
                 "author_name": bot_name,
                 "is_bot": True,
-                "response": answers  # List of 3 strings
+                "response": answers,  # List of 3 strings
+                "is_locked": True,
+                "version": 0
             }
 
     def _get_fallback_response(self) -> list:
         if self.chosen_prompt and self.chosen_prompt.get("fallbacks"):
             fallbacks = self.chosen_prompt["fallbacks"]
             return random.sample(fallbacks, min(3, len(fallbacks)))
-        return ["My algorithm", "Syntax errors", "Rebooting the server"]
+        return ["Traffic", "Overslept", "Car trouble"]
 
-    def submit_player_response(self, player_id: str, player_name: str, response_data: Any) -> bool:
-        # response_data can be a list of 3 strings or a single comma-separated string
-        if isinstance(response_data, list):
-            cleaned = [str(x).strip() for x in response_data if str(x).strip()]
-        elif isinstance(response_data, str):
-            cleaned = [x.strip() for x in response_data.split("\n") if x.strip()]
-        else:
-            cleaned = ["Response 1", "Response 2", "Response 3"]
-        
-        while len(cleaned) < 3:
-            cleaned.append(f"Answer {len(cleaned)+1}")
-
+    def submit_player_response(self, player_id: str, player_name: str, response_data: Any, is_locked: bool = True, version: int = 0) -> bool:
         with self._lock:
             submission_id = f"sub_{player_id}"
+            existing = self.submissions.get(submission_id)
+            if existing:
+                if existing.get("is_locked", False) and not is_locked:
+                    return False
+                if version and existing.get("version", 0) > version:
+                    return False
+
+            if is_locked:
+                # response_data can be a list of 3 strings or a single comma-separated string
+                if isinstance(response_data, list):
+                    cleaned = [str(x).strip() for x in response_data if str(x).strip()]
+                elif isinstance(response_data, str):
+                    cleaned = [x.strip() for x in response_data.split("\n") if x.strip()]
+                else:
+                    cleaned = ["Response 1", "Response 2", "Response 3"]
+                
+                while len(cleaned) < 3:
+                    cleaned.append(f"Answer {len(cleaned)+1}")
+                stored_response = cleaned[:3]
+            else:
+                # Live draft - preserve input state as list of strings
+                if isinstance(response_data, list):
+                    stored_response = [str(x) for x in response_data]
+                elif isinstance(response_data, str):
+                    stored_response = [response_data, "", ""]
+                else:
+                    stored_response = ["", "", ""]
+
             self.submissions[submission_id] = {
                 "id": submission_id,
                 "author_id": player_id,
                 "author_name": player_name,
                 "is_bot": False,
-                "response": cleaned[:3]
+                "response": stored_response,
+                "is_locked": is_locked,
+                "version": version
             }
             return True
+
+    def finalize_submissions(self, players: Dict[str, Any]):
+        """
+        Locks any in-progress survey drafts, padding partial answers up to 3,
+        or uses fallbacks if player typed nothing.
+        """
+        with self._lock:
+            for pid, p in players.items():
+                sub_id = f"sub_{pid}"
+                sub = self.submissions.get(sub_id)
+                if not sub:
+                    fallbacks = self._get_fallback_response()
+                    self.submissions[sub_id] = {
+                        "id": sub_id,
+                        "author_id": pid,
+                        "author_name": p["name"],
+                        "is_bot": False,
+                        "response": fallbacks,
+                        "is_locked": True,
+                        "version": 0
+                    }
+                elif not sub.get("is_locked", False):
+                    resp = sub.get("response", [])
+                    cleaned = [str(x).strip() for x in resp if str(x).strip()] if isinstance(resp, list) else []
+                    if cleaned:
+                        while len(cleaned) < 3:
+                            cleaned.append(f"Answer {len(cleaned)+1}")
+                        sub["response"] = cleaned[:3]
+                        sub["is_locked"] = True
+                    else:
+                        sub["response"] = self._get_fallback_response()
+                        sub["is_locked"] = True

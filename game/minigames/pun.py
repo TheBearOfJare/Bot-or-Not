@@ -5,55 +5,55 @@ PUN_PROMPTS = [
     {
         "setup": "Why don't skeletons fight each other? Because...",
         "fallbacks": [
-            "they don't have the guts!",
-            "their hearts aren't in it.",
-            "they have no bone to pick.",
-            "calcium deficiency prevents aggression."
+            "They don't have the guts",
+            "Their hearts aren't in it",
+            "They got no backbone",
+            "They have no stomach for it"
         ]
     },
     {
         "setup": "I told my suitcase there will be no vacation this year. Now...",
         "fallbacks": [
-            "I'm dealing with emotional baggage.",
-            "it is completely unpacked emotionally.",
-            "it zipped its mouth and won't talk.",
-            "its zipper broke from weeping."
+            "I'm dealing with emotional baggage",
+            "It won't talk to me",
+            "It's completely packed with rage",
+            "It won't open up to me"
         ]
     },
     {
         "setup": "Parallel lines have so much in common. It's a shame...",
         "fallbacks": [
-            "they'll never meet.",
-            "their slopes remain eternally alienated.",
-            "geometry keeps them emotionally distant.",
-            "they can never cross paths."
+            "They'll never meet",
+            "They never cross paths",
+            "They never get together",
+            "They're always apart"
         ]
     },
     {
         "setup": "What do you call a fake noodle? An...",
         "fallbacks": [
-            "Impasta!",
-            "Artificial spaghetti construct.",
-            "Udon know who I am.",
-            "Imitation carb simulator."
+            "Impasta",
+            "Impasta obviously",
+            "Im-pasta",
+            "Impostor pasta"
         ]
     },
     {
         "setup": "Why did the scarecrow win an award? Because he was...",
         "fallbacks": [
-            "outstanding in his field!",
-            "the ultimate straw man.",
-            "not easily rattled by crows.",
-            "optimized for avian deterrence."
+            "Outstanding in his field",
+            "Out standing in his field",
+            "Just standing there",
+            "The only one who showed up"
         ]
     },
     {
         "setup": "I used to play piano by ear, but now I...",
         "fallbacks": [
-            "use my hands like a normal person.",
-            "realized my ears lack fingers.",
-            "consult sheet music algorithms.",
-            "have bruised eardrums."
+            "Use my hands",
+            "Use my fingers like a normal person",
+            "Just listen to Spotify",
+            "Gave up completely"
         ]
     }
 ]
@@ -94,10 +94,13 @@ class CompleteThePunGame(BaseMinigame):
                 "author_id": bot_id,
                 "author_name": bot_name,
                 "is_bot": True,
-                "response": punchline
+                "response": punchline,
+                "is_locked": True,
+                "version": 0
             }
 
     def _get_fallback_response(self) -> str:
         if self.chosen_prompt and self.chosen_prompt.get("fallbacks"):
-            return random.choice(self.chosen_prompt["fallbacks"])
-        return "Because it computed zero sense!"
+            chosen = random.choice(self.chosen_prompt["fallbacks"])
+            return chosen[0].upper() + chosen[1:] if chosen else ""
+        return "They don't have the guts"

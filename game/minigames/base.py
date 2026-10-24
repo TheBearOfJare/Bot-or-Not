@@ -47,7 +47,7 @@ class BaseMinigame:
 
     def _get_fallback_response(self) -> Any:
         """Override in subclass to return a random fallback answer."""
-        return "I am definitely a real human player doing normal human things."
+        return "Ran out of time"
 
     def ensure_bot_fallbacks(self):
         """Guarantees that all required bot submissions exist before voting starts."""
@@ -59,12 +59,18 @@ class BaseMinigame:
                 sub_id = f"sub_{bot_id}"
                 if sub_id not in self.submissions:
                     fallback_val = self._get_fallback_response()
+                    if isinstance(fallback_val, str) and fallback_val:
+                        fallback_val = fallback_val[0].upper() + fallback_val[1:]
+                    elif isinstance(fallback_val, list):
+                        fallback_val = [x[0].upper() + x[1:] if isinstance(x, str) and x else x for x in fallback_val]
                     self.submissions[sub_id] = {
                         "id": sub_id,
                         "author_id": bot_id,
                         "author_name": self.bot_engine.get_bot_display_name() if self.bot_engine else "Bot",
                         "is_bot": True,
-                        "response": fallback_val
+                        "response": fallback_val,
+                        "is_locked": True,
+                        "version": 0
                     }
 
     def ensure_bots_ready(self, timeout: float = 2.0):
@@ -92,30 +98,72 @@ class BaseMinigame:
             **self.prompt_data
         }
 
-    def submit_player_response(self, player_id: str, player_name: str, response_text: Any) -> bool:
+    def submit_player_response(self, player_id: str, player_name: str, response_text: Any, is_locked: bool = True, version: int = 0) -> bool:
         """
-        Record a player's submission.
+        Record a player's submission or live draft.
         """
         with self._lock:
             submission_id = f"sub_{player_id}"
+            existing = self.submissions.get(submission_id)
+            if existing:
+                # If already locked, do not overwrite with an unlocked draft
+                if existing.get("is_locked", False) and not is_locked:
+                    return False
+                # If incoming version timestamp is older than existing version, discard out-of-order packet
+                if version and existing.get("version", 0) > version:
+                    return False
+
             self.submissions[submission_id] = {
                 "id": submission_id,
                 "author_id": player_id,
                 "author_name": player_name,
                 "is_bot": False,
-                "response": response_text
+                "response": response_text,
+                "is_locked": is_locked,
+                "version": version
             }
             return True
 
     def are_submissions_complete(self, active_player_ids: List[str]) -> bool:
         """
-        Check if all human players have submitted their responses.
+        Check if all human players have locked in their submissions.
         """
         with self._lock:
-            submitted_authors = {
-                sub["author_id"] for sub in self.submissions.values() if not sub["is_bot"]
+            locked_authors = {
+                sub["author_id"] for sub in self.submissions.values()
+                if not sub["is_bot"] and sub.get("is_locked", False)
             }
-            return set(active_player_ids).issubset(submitted_authors)
+            return set(active_player_ids).issubset(locked_authors)
+
+    def finalize_submissions(self, players: Dict[str, Any]):
+        """
+        Called when submitting phase times out. Locks all pending human drafts,
+        or inserts a fallback placeholder if a player wrote nothing.
+        """
+        with self._lock:
+            for pid, p in players.items():
+                sub_id = f"sub_{pid}"
+                sub = self.submissions.get(sub_id)
+                if not sub:
+                    self.submissions[sub_id] = {
+                        "id": sub_id,
+                        "author_id": pid,
+                        "author_name": p["name"],
+                        "is_bot": False,
+                        "response": "[Out of time - Blank submission]",
+                        "is_locked": True,
+                        "version": 0
+                    }
+                elif not sub.get("is_locked", False):
+                    resp = sub.get("response", "")
+                    if isinstance(resp, str) and resp.strip():
+                        sub["response"] = resp.strip()
+                        sub["is_locked"] = True
+                    elif isinstance(resp, list) and any(str(x).strip() for x in resp):
+                        sub["is_locked"] = True
+                    else:
+                        sub["response"] = "[Out of time - Blank submission]"
+                        sub["is_locked"] = True
 
     def get_voting_options(self, voter_id: str = None) -> List[Dict[str, Any]]:
         """
