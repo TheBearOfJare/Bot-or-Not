@@ -9,6 +9,62 @@ let lastPromptIndex = -1;
 let lastVoteIndex = -1;
 let lastRevealIndex = -1;
 
+// --- Terminal Typewriter Effect ---
+function typeTerminalText(element, text, options = {}) {
+    if (!element) return;
+    const speed = options.speed || 16;
+    const showCursor = options.cursor !== false;
+    const onComplete = options.onComplete || null;
+
+    if (element._termTimer) {
+        clearTimeout(element._termTimer);
+        element._termTimer = null;
+    }
+
+    if (!text) {
+        element.textContent = "";
+        if (onComplete) onComplete();
+        return;
+    }
+
+    element.textContent = "";
+    let cursorSpan = null;
+    if (showCursor) {
+        cursorSpan = document.createElement("span");
+        cursorSpan.className = "terminal-cursor";
+        cursorSpan.innerHTML = "&nbsp;";
+        element.appendChild(cursorSpan);
+    }
+
+    let charIndex = 0;
+    function nextChar() {
+        if (charIndex < text.length) {
+            const char = text.charAt(charIndex);
+            charIndex++;
+            const textNode = document.createTextNode(char);
+            if (cursorSpan && cursorSpan.parentNode === element) {
+                element.insertBefore(textNode, cursorSpan);
+            } else {
+                element.appendChild(textNode);
+            }
+            const jitter = Math.floor(Math.random() * 6) - 3;
+            element._termTimer = setTimeout(nextChar, Math.max(6, speed + jitter));
+        } else {
+            element._termTimer = null;
+            if (options.removeCursorAfter) {
+                setTimeout(() => {
+                    if (cursorSpan && cursorSpan.parentNode === element) {
+                        cursorSpan.remove();
+                    }
+                }, options.removeCursorAfter);
+            }
+            if (onComplete) onComplete();
+        }
+    }
+
+    nextChar();
+}
+
 // Initialize on page load
 document.addEventListener("DOMContentLoaded", () => {
     pollHostState();
@@ -59,6 +115,11 @@ function renderHostView(state) {
     lastPromptIndex = currPromptIdx;
     lastVoteIndex = currVoteIdx;
     lastRevealIndex = currRevIdx;
+
+    if (state.phase !== "REVEAL") {
+        clearRevealSequence();
+        currentRevealingKey = null;
+    }
 
     switch (state.phase) {
         case "LOBBY":
@@ -229,13 +290,18 @@ function renderInstructions(state, isNewPhase) {
     const qInfo = state.question_info || {};
     const totalQ = qInfo.total_questions || state.questions_per_minigame || 3;
 
-    document.getElementById("instructions-round-tag").innerText = `Round ${state.round_number} of ${state.total_rounds}`;
+    document.getElementById("instructions-round-tag").innerText = `[ ROUND ${state.round_number} OF ${state.total_rounds} ]`;
     const qTag = document.getElementById("instructions-questions-tag");
-    if (qTag) qTag.innerText = `${totalQ} Prompts`;
+    if (qTag) qTag.innerText = `[ ${totalQ} PROMPTS ]`;
 
     if (state.game_info) {
         document.getElementById("instructions-game-title").innerText = state.game_info.title;
-        document.getElementById("instructions-text").innerText = state.game_info.instruction;
+        const instEl = document.getElementById("instructions-text");
+        const instText = state.game_info.instruction || "";
+        if (instEl && (isNewPhase || instEl.getAttribute("data-typed-text") !== instText)) {
+            instEl.setAttribute("data-typed-text", instText);
+            typeTerminalText(instEl, instText, { speed: 15, cursor: true });
+        }
     }
 
     if (isNewPhase) {
@@ -249,14 +315,20 @@ function renderSubmitting(state, isNewPrompt) {
     const totalQ = qInfo.total_questions || state.questions_per_minigame || 3;
     const currPromptNum = qInfo.current_prompt_number || 1;
 
-    document.getElementById("submitting-round-tag").innerText = `Round ${state.round_number} of ${state.total_rounds}`;
+    document.getElementById("submitting-round-tag").innerText = `[ ROUND ${state.round_number} OF ${state.total_rounds} ]`;
     const qTag = document.getElementById("submitting-question-tag");
-    if (qTag) qTag.innerText = `Prompt ${currPromptNum} of ${totalQ}`;
+    if (qTag) qTag.innerText = `[ PROMPT ${currPromptNum} OF ${totalQ} ]`;
 
     if (state.game_info) {
         document.getElementById("submitting-game-title").innerText = state.game_info.title;
         const promptData = state.game_info.prompt_data || {};
-        document.getElementById("submitting-prompt-text").innerText = promptData.prompt_text || "";
+        const pText = promptData.prompt_text || "";
+
+        const promptEl = document.getElementById("submitting-prompt-text");
+        if (promptEl && (isNewPrompt || promptEl.getAttribute("data-typed-text") !== pText)) {
+            promptEl.setAttribute("data-typed-text", pText);
+            typeTerminalText(promptEl, pText, { speed: 18, cursor: true });
+        }
 
         // Check if image captcha
         const captchaBox = document.getElementById("submitting-captcha-box");
@@ -270,7 +342,7 @@ function renderSubmitting(state, isNewPrompt) {
     }
 
     if (isNewPrompt) {
-        startCountdown(state.submission_timeout || 25, "submitting-timer", advancePhase);
+        startCountdown(state.submission_timeout || 30, "submitting-timer", advancePhase);
     }
 
     // Submissions progress badges
@@ -278,9 +350,9 @@ function renderSubmitting(state, isNewPrompt) {
     if (state.submissions_status) {
         list.innerHTML = state.submissions_status.map(p => `
             <div class="player-badge ${p.has_submitted ? 'ready' : 'pending'}">
-                <span>${p.has_submitted ? '✅' : (p.has_draft ? '✍️' : '💭')}</span>
+                <span>${p.has_submitted ? '✓' : (p.has_draft ? '✍' : '◌')}</span>
                 <span>${escapeHtml(p.name)}</span>
-                <span style="font-size: 0.85rem; color: #9ca3af;">${p.has_submitted ? 'Submitted' : (p.has_draft ? 'Typing...' : 'Thinking...')}</span>
+                <span style="font-size: 0.82rem; color: var(--text-secondary);">${p.has_submitted ? '[SUBMITTED]' : (p.has_draft ? '[TYPING...]' : '[THINKING...]')}</span>
             </div>
         `).join("");
     }
@@ -297,8 +369,12 @@ function renderVoting(state, isNewVote) {
         const promptData = state.game_info.prompt_data || {};
         const reminderEl = document.getElementById("voting-prompt-reminder");
         if (reminderEl) {
-            reminderEl.innerText = promptData.prompt_text ? `Prompt: ${promptData.prompt_text}` : "";
+            const pText = promptData.prompt_text ? `Prompt: ${promptData.prompt_text}` : "";
             reminderEl.style.display = promptData.prompt_text ? "block" : "none";
+            if (pText && (isNewVote || reminderEl.getAttribute("data-typed-text") !== pText)) {
+                reminderEl.setAttribute("data-typed-text", pText);
+                typeTerminalText(reminderEl, pText, { speed: 14, cursor: true });
+            }
         }
     }
 
@@ -351,7 +427,93 @@ function renderVoting(state, isNewVote) {
     }
 }
 
-// --- Phase 5: Reveal ---
+// --- Phase 5: Reveal (Sequential Talent Show / Stamp Reveal) ---
+
+let revealTimeouts = [];
+let currentRevealingKey = null;
+let stampAudioCtx = null;
+
+function clearRevealSequence() {
+    revealTimeouts.forEach(t => clearTimeout(t));
+    revealTimeouts = [];
+}
+
+function playStampSound() {
+    try {
+        if (!stampAudioCtx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) stampAudioCtx = new AudioCtx();
+        }
+        if (stampAudioCtx && stampAudioCtx.state === "suspended") {
+            stampAudioCtx.resume();
+        }
+        if (!stampAudioCtx) return;
+
+        const now = stampAudioCtx.currentTime;
+
+        // Punchy low stamp thud
+        const osc = stampAudioCtx.createOscillator();
+        const gain = stampAudioCtx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(32, now + 0.18);
+
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+
+        osc.connect(gain);
+        gain.connect(stampAudioCtx.destination);
+        osc.start(now);
+        osc.stop(now + 0.2);
+
+        // Talent show rejection buzzer / impact buzz
+        const buzz = stampAudioCtx.createOscillator();
+        const buzzGain = stampAudioCtx.createGain();
+        buzz.type = "sawtooth";
+        buzz.frequency.setValueAtTime(220, now);
+        buzz.frequency.linearRampToValueAtTime(95, now + 0.14);
+
+        buzzGain.gain.setValueAtTime(0.18, now);
+        buzzGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+
+        buzz.connect(buzzGain);
+        buzzGain.connect(stampAudioCtx.destination);
+        buzz.start(now);
+        buzz.stop(now + 0.15);
+    } catch (e) {
+        // Fallback gracefully if audio is prevented by browser policy
+    }
+}
+
+function triggerStampSlam(cardEl, stampEl, cardIndex, stampIndex, totalVotes, isBot) {
+    playStampSound();
+
+    // Trigger punchy card shake on impact
+    if (cardEl) {
+        cardEl.classList.remove("card-shake");
+        void cardEl.offsetWidth; // trigger reflow
+        cardEl.classList.add("card-shake");
+    }
+
+    // Extensible event & callback for user-provided sound assets or animations
+    const detail = { cardIndex, stampIndex, totalVotes, isBot };
+    window.dispatchEvent(new CustomEvent("bot-vote-stamp", { detail }));
+    if (typeof window.onBotVoteStamp === "function") {
+        window.onBotVoteStamp(detail);
+    }
+}
+
+function sortRevealCards(cards) {
+    return [...cards].sort((a, b) => {
+        const botA = a.is_bot ? 1 : 0;
+        const botB = b.is_bot ? 1 : 0;
+        if (botA !== botB) {
+            return botA - botB; // Humans (0) first, then bots (1)
+        }
+        return (a.vote_count || 0) - (b.vote_count || 0); // Lowest to highest vote count
+    });
+}
+
 function renderReveal(state, isNewReveal) {
     const qInfo = state.question_info || {};
     const totalQ = qInfo.total_questions || state.questions_per_minigame || 3;
@@ -362,54 +524,161 @@ function renderReveal(state, isNewReveal) {
 
     const revealData = state.reveal_data || {};
     const promptReminder = document.getElementById("reveal-prompt-reminder");
+    const pText = revealData.active_prompt_data?.prompt_text || "";
     if (promptReminder) {
-        const pText = revealData.active_prompt_data?.prompt_text || "";
-        promptReminder.innerText = pText ? `Prompt: ${pText}` : "";
         promptReminder.style.display = pText ? "block" : "none";
+        if (pText && (isNewReveal || promptReminder.getAttribute("data-typed-text") !== pText)) {
+            promptReminder.setAttribute("data-typed-text", pText);
+            typeTerminalText(promptReminder, `>> EVALUATING: ${pText}`, { speed: 14, cursor: true });
+        }
     }
 
     const container = document.getElementById("reveal-cards-container");
-    const cards = revealData.reveal_cards || [];
+    const rawCards = revealData.reveal_cards || [];
+    const sortedCards = sortRevealCards(rawCards);
 
-    if (cards.length > 0) {
-        container.innerHTML = cards.map(card => {
-            const isBot = card.is_bot;
-            const content = Array.isArray(card.response) 
-                ? `<ol style="margin-left: 20px;">${card.response.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ol>`
-                : `"${escapeHtml(card.response)}"`;
+    const revealKey = `${currRevNum}_${pText}`;
 
-            const votersText = card.voter_names.length > 0 
-                ? `Voted as Bot by: <strong>${card.voter_names.join(", ")}</strong>` 
-                : "No votes received.";
+    // If new reveal or not currently rendering this question's sequence
+    if (isNewReveal || currentRevealingKey !== revealKey) {
+        currentRevealingKey = revealKey;
+        clearRevealSequence();
+        container.innerHTML = "";
 
-            const pointsNotice = isBot 
-                ? `<div style="color: #6ee7b7; font-weight: 600; margin-top: 6px;">🎯 Identified as BOT! (+100 pts to voters)</div>`
-                : (card.vote_count > 0 
-                    ? `<div style="color: #f87171; font-weight: 600; margin-top: 6px;">⚠️ Fooled fellow humans! (-25 pts penalty per vote to author for failing to blend in)</div>` 
-                    : `<div style="color: #9ca3af; margin-top: 6px;">Clearly human, no votes.</div>`);
+        if (sortedCards.length === 0) {
+            container.innerHTML = `<div style="text-align:center; color:#9ca3af; padding:30px;">No responses to reveal for this question.</div>`;
+            startCountdown(8, "reveal-timer", advancePhase);
+            const bottomTimer = document.getElementById("reveal-timer-bottom");
+            if (bottomTimer) bottomTimer.innerText = "8";
+            return;
+        }
 
-            return `
-                <div class="reveal-card ${isBot ? 'bot' : 'human'}">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span class="tag ${isBot ? 'tag-bot' : 'tag-human'}">
-                            ${isBot ? '🤖 BOT' : '👤 HUMAN PLAYER'}
-                        </span>
-                        <span style="font-size: 0.95rem; color: #9ca3af;">${card.vote_count} vote(s)</span>
-                    </div>
-                    <div style="font-size: 1.25rem; margin: 10px 0;">${content}</div>
-                    <div style="font-size: 1rem; color: #d1d5db; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 8px;">
-                        ${votersText}
-                        ${pointsNotice}
-                    </div>
-                </div>
-            `;
-        }).join("");
+        // Calculate card timings:
+        // Each card: 250ms entrance + (vote_count * 280ms per stamp) + (vote_count === 0 ? 600ms : 850ms pause)
+        const cardDurations = sortedCards.map(c => {
+            const votes = c.vote_count || 0;
+            return votes === 0 ? 850 : 250 + (votes * 280) + 850;
+        });
+
+        const totalAnimMs = cardDurations.reduce((sum, d) => sum + d, 0);
+        // Leave ~5-6s after all cards are revealed for players to read the complete board
+        const totalDurationSec = Math.max(10, Math.ceil((totalAnimMs + 5500) / 1000));
+
+        startCountdown(totalDurationSec, "reveal-timer", advancePhase);
+        const bottomTimer = document.getElementById("reveal-timer-bottom");
+        if (bottomTimer) bottomTimer.innerText = totalDurationSec;
+
+        let cumulativeTime = 0;
+        sortedCards.forEach((card, cardIndex) => {
+            const cardStartTime = cumulativeTime;
+            const duration = cardDurations[cardIndex];
+            cumulativeTime += duration;
+
+            const t = setTimeout(() => {
+                displayRevealCardStep(container, card, cardIndex);
+            }, cardStartTime);
+            revealTimeouts.push(t);
+        });
+    }
+}
+
+function displayRevealCardStep(container, card, cardIndex) {
+    const isBot = Boolean(card.is_bot);
+    const voteCount = card.vote_count || 0;
+    const voters = card.voter_names || [];
+
+    const content = Array.isArray(card.response) 
+        ? `<ol style="margin-left: 20px;">${card.response.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ol>`
+        : `"${escapeHtml(card.response)}"`;
+
+    const votersText = voters.length > 0 
+        ? `Voted as Bot by: <strong>${voters.map(escapeHtml).join(", ")}</strong>` 
+        : "No votes received.";
+
+    // Fix bug: If it's a bot with 0 votes, it was NOT identified, so show it went undetected!
+    let pointsNotice = "";
+    if (isBot) {
+        if (voteCount > 0) {
+            pointsNotice = `<div style="color: #6ee7b7; font-weight: 600; margin-top: 6px;">🎯 Identified as BOT! (+100 pts to voters)</div>`;
+        } else {
+            pointsNotice = `<div style="color: #fbbf24; font-weight: 600; margin-top: 6px;">🤖 Undetected BOT passed as human! Fooled all players (0 votes).</div>`;
+        }
+    } else {
+        if (voteCount > 0) {
+            pointsNotice = `<div style="color: #f87171; font-weight: 600; margin-top: 6px;">⚠️ Looked like a bot! (${-(25 * voteCount)} pts penalty to author)</div>`;
+        } else {
+            pointsNotice = `<div style="color: #9ca3af; margin-top: 6px;">Clearly human, no votes.</div>`;
+        }
     }
 
-    if (isNewReveal) {
-        startCountdown(10, "reveal-timer", advancePhase);
-        const bottomTimer = document.getElementById("reveal-timer-bottom");
-        if (bottomTimer) bottomTimer.innerText = "10";
+    const cardDiv = document.createElement("div");
+    cardDiv.className = `reveal-card ${isBot ? 'bot' : 'human'} revealing-active`;
+    cardDiv.id = `reveal-card-${cardIndex}`;
+
+    cardDiv.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+            <span class="tag ${isBot ? 'tag-bot' : 'tag-human'}">
+                ${isBot ? '🤖 BOT' : '👤 HUMAN PLAYER'}
+            </span>
+            <div class="vote-stamps-corner" id="stamps-corner-${cardIndex}"></div>
+        </div>
+        <div style="font-size: 1.25rem; margin: 10px 0;">${content}</div>
+        <div class="reveal-card-details" id="details-card-${cardIndex}" style="font-size: 1rem; color: #d1d5db; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 8px; ${voteCount > 0 ? 'opacity: 0; transition: opacity 0.3s ease;' : ''}">
+            ${votersText}
+            ${pointsNotice}
+        </div>
+    `;
+
+    container.prepend(cardDiv);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    const corner = cardDiv.querySelector(`#stamps-corner-${cardIndex}`);
+    const details = cardDiv.querySelector(`#details-card-${cardIndex}`);
+
+    if (voteCount === 0) {
+        // Zero votes badge
+        const badge = document.createElement("span");
+        badge.className = isBot ? "zero-votes-badge bot-undetected-badge" : "zero-votes-badge";
+        badge.innerText = isBot ? "0 votes (Undetected!)" : "0 votes";
+        corner.appendChild(badge);
+
+        // De-emphasize active highlight after beat
+        const tActive = setTimeout(() => {
+            cardDiv.classList.remove("revealing-active");
+        }, 700);
+        revealTimeouts.push(tActive);
+    } else {
+        // Sequentially stamp each robot emoji in short succession
+        for (let i = 0; i < voteCount; i++) {
+            const stampDelay = 250 + (i * 280);
+            const tStamp = setTimeout(() => {
+                const stamp = document.createElement("div");
+                stamp.className = "vote-stamp";
+                stamp.setAttribute("data-stamp-index", i);
+                stamp.title = "Voted as Bot";
+                // Slight random rotation angle for talent show stamp vibe (-10deg to 10deg)
+                const rot = (Math.sin((cardIndex + 1) * (i + 1) * 37) * 9).toFixed(1);
+                stamp.style.setProperty("--stamp-rot", `${rot}deg`);
+                stamp.innerHTML = `<span class="vote-stamp-icon">🤖</span>`;
+                corner.appendChild(stamp);
+
+                triggerStampSlam(cardDiv, stamp, cardIndex, i, voteCount, isBot);
+            }, stampDelay);
+            revealTimeouts.push(tStamp);
+        }
+
+        // Once all stamps slammed down: show vote count pill, reveal details, and remove active pulse
+        const finishDelay = 250 + (voteCount * 280) + 120;
+        const tFinish = setTimeout(() => {
+            const countPill = document.createElement("span");
+            countPill.className = "vote-count-pill";
+            countPill.innerText = `${voteCount} vote${voteCount > 1 ? 's' : ''}`;
+            corner.appendChild(countPill);
+
+            if (details) details.style.opacity = "1";
+            cardDiv.classList.remove("revealing-active");
+        }, finishDelay);
+        revealTimeouts.push(tFinish);
     }
 }
 
@@ -518,8 +787,18 @@ function renderGameOver(state) {
     clearInterval(countdownInterval);
 
     if (state.winner) {
-        document.getElementById("winner-name").innerText = `🎉 ${state.winner.name} 🎉`;
-        document.getElementById("winner-score").innerText = `Final Score: ${state.winner.score} pts`;
+        const wName = document.getElementById("winner-name");
+        const wScore = document.getElementById("winner-score");
+        const winTitle = `[ CHAMPION: ${state.winner.name} ]`;
+        const scoreTitle = `Aggregate Evaluation Score: ${state.winner.score} pts`;
+        if (wName && wName.getAttribute("data-typed-text") !== winTitle) {
+            wName.setAttribute("data-typed-text", winTitle);
+            typeTerminalText(wName, winTitle, { speed: 25, cursor: true });
+        }
+        if (wScore && wScore.getAttribute("data-typed-text") !== scoreTitle) {
+            wScore.setAttribute("data-typed-text", scoreTitle);
+            typeTerminalText(wScore, scoreTitle, { speed: 20, cursor: true });
+        }
     }
 
     const tbody = document.getElementById("gameover-scoreboard-body");
@@ -558,6 +837,8 @@ function startCountdown(seconds, elementId, callback) {
 
 async function advancePhase() {
     clearInterval(countdownInterval);
+    clearRevealSequence();
+    currentRevealingKey = null;
     const phaseAtTrigger = currentState ? currentState.phase : null;
     await fetch("/api/next_phase", {
         method: "POST",
@@ -569,6 +850,8 @@ async function advancePhase() {
 
 async function resetToLobby() {
     clearInterval(countdownInterval);
+    clearRevealSequence();
+    currentRevealingKey = null;
     await fetch("/api/reset", { method: "POST" });
     pollHostState();
 }

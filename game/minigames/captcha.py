@@ -3,14 +3,14 @@ import time
 import random
 from typing import Dict, Any
 from game.minigames.base import BaseMinigame
-from game.minigames.captcha_gen import CAPTCHA_SUBJECTS, create_captcha_asset
+from game.minigames.captcha_gen import CAPTCHA_SUBJECTS, create_captcha_asset, is_attngan_active
 
 class CaptchaCaptionGame(BaseMinigame):
     def __init__(self, bot_engine, bot_count: int = 1, questions_count: int = 3):
         super().__init__(
             game_id="captcha",
             title="Captcha Caption",
-            instruction="Decipher and describe the contents of the CAPTCHA shown to you.",
+            instruction="Humans are good at interperating abstract representations of real-world concepts. Computers are... not. Decipher and describe the contents of the CAPTCHA shown to you.",
             bot_engine=bot_engine,
             bot_count=bot_count,
             questions_count=questions_count
@@ -19,20 +19,28 @@ class CaptchaCaptionGame(BaseMinigame):
     def _select_prompts(self):
         self.questions = []
         ts = int(time.time())
+        attngan_ready = is_attngan_active()
+        available_keys = list(CAPTCHA_SUBJECTS.keys())
+        random.shuffle(available_keys)
 
         for i in range(self.questions_count):
-            prompt_info = self.bot_engine.generate_dynamic_captcha_prompt()
-            chosen_prompt = prompt_info["prompt"]
-            subject_key = prompt_info.get("seed", f"captcha_{i}")
-            subject = CAPTCHA_SUBJECTS.get(subject_key, {
-                "title": prompt_info.get("title", "Security Verification"),
-                "description": chosen_prompt,
-                "fallbacks": [
-                    "Looks like a street scene",
-                    "Car parked on the road",
-                    "Blurry scene with an animal"
-                ]
-            })
+            if attngan_ready:
+                prompt_info = self.bot_engine.generate_dynamic_captcha_prompt()
+                chosen_prompt = prompt_info["prompt"]
+                subject_key = prompt_info.get("seed", f"captcha_{i}")
+                subject = CAPTCHA_SUBJECTS.get(subject_key, {
+                    "title": prompt_info.get("title", "Security Verification"),
+                    "description": chosen_prompt,
+                    "fallbacks": [
+                        "Looks like a street scene",
+                        "Car parked on the road",
+                        "Blurry scene with an animal"
+                    ]
+                })
+            else:
+                subject_key = available_keys[i % len(available_keys)]
+                subject = CAPTCHA_SUBJECTS[subject_key]
+                chosen_prompt = subject_key
 
             img_filename = f"captcha_{subject_key}_{ts}_{i}.png"
             image_filepath = os.path.join("static", "images", "captchas", img_filename)
@@ -43,10 +51,10 @@ class CaptchaCaptionGame(BaseMinigame):
                 "index": i,
                 "prompt_data": {
                     "type": "image_caption",
-                    "prompt_text": "Describe what is happening in this image:",
+                    "prompt_text": "Describe what is depicted in this image:",
                     "subject_title": "Security Verification",
                     "image_url": image_url,
-                    "placeholder": "Describe what is happening in this image..."
+                    "placeholder": "Describe what is depicted in this image..."
                 },
                 "meta": {
                     "chosen_prompt": chosen_prompt,

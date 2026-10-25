@@ -114,7 +114,7 @@ class SurveySaysGame(BaseMinigame):
         super().__init__(
             game_id="survey",
             title="Survey Says",
-            instruction="Family Feud style! Give your top 3 answers to the prompt.",
+            instruction="Computers reason differently than humans because they don't have a human experience. Demonstrate your relatability as a human and answer these survey questions.",
             bot_engine=bot_engine,
             bot_count=bot_count,
             questions_count=questions_count

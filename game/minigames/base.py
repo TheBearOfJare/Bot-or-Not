@@ -386,6 +386,9 @@ class BaseMinigame:
                         "vote_count": len(voters)
                     })
 
+                # Sort: Humans first (0), then Bots (1); internally lowest to highest votes
+                reveal_cards.sort(key=lambda c: (1 if c["is_bot"] else 0, c["vote_count"]))
+
                 questions_reveal.append({
                     "question_index": q_idx,
                     "question_number": q_idx + 1,

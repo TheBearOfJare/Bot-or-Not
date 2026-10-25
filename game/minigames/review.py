@@ -13,7 +13,7 @@ REVIEW_PRODUCTS = [
         ]
     },
     {
-        "product": "A lukewarm bottle of municipal tap water",
+        "product": "A bottle of municipal tap water",
         "fallbacks": [
             "Tastes like straight rust and old pipes",
             "Was literally warm and gross",
@@ -31,7 +31,7 @@ REVIEW_PRODUCTS = [
         ]
     },
     {
-        "product": "A single brown cardboard box",
+        "product": "A brown cardboard box",
         "fallbacks": [
             "Arrived crushed and soaked",
             "Fell apart as soon as I picked it up",
@@ -76,7 +76,7 @@ REVIEW_PRODUCTS = [
         ]
     },
     {
-        "product": "A basic USB-A wall charger",
+        "product": "A basic USB wall charger",
         "fallbacks": [
             "Took 11 hours to charge my phone 3 percent",
             "Emitted a high-pitched buzzing screech all night",
@@ -85,12 +85,12 @@ REVIEW_PRODUCTS = [
         ]
     },
     {
-        "product": "A roll of clear cellophane tape",
+        "product": "A roll of aluminum foil",
         "fallbacks": [
-            "Could never find the tape edge again",
-            "Tore diagonally every single time I pulled",
-            "Completely lost its stickiness within five minutes",
-            "Ripped the paint clean off my wall"
+            "Didn't protect me from aliens",
+            "I got one clean sheet and then it never tore straight again",
+            "The cookies still got stale",
+            "Foiled my plans of world domination"
         ]
     },
     {
@@ -118,7 +118,7 @@ class OneStarReviewGame(BaseMinigame):
         super().__init__(
             game_id="review",
             title="1 Star Review",
-            instruction="Review-bomb this mundane everyday item! Give a petty, hilarious 1-star review.",
+            instruction="Computers are not good at abstracting the experience from an object. Review-bomb this everyday item.",
             bot_engine=bot_engine,
             bot_count=bot_count,
             questions_count=questions_count

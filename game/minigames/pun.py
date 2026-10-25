@@ -136,7 +136,7 @@ class CompleteThePunGame(BaseMinigame):
         super().__init__(
             game_id="pun",
             title="Complete the Pun",
-            instruction="Fill in the punchline! Make it sound like a human wrote it so nobody suspects you.",
+            instruction="Computers struggle at being funny. Prove that you can do better.",
             bot_engine=bot_engine,
             bot_count=bot_count,
             questions_count=questions_count

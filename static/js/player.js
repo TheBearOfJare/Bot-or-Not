@@ -24,6 +24,62 @@ let draftSyncTimer = null;
 let lastSentDraftJson = null;
 let lastDraftSentTime = 0;
 
+// --- Terminal Typewriter Effect ---
+function typeTerminalText(element, text, options = {}) {
+    if (!element) return;
+    const speed = options.speed || 16;
+    const showCursor = options.cursor !== false;
+    const onComplete = options.onComplete || null;
+
+    if (element._termTimer) {
+        clearTimeout(element._termTimer);
+        element._termTimer = null;
+    }
+
+    if (!text) {
+        element.textContent = "";
+        if (onComplete) onComplete();
+        return;
+    }
+
+    element.textContent = "";
+    let cursorSpan = null;
+    if (showCursor) {
+        cursorSpan = document.createElement("span");
+        cursorSpan.className = "terminal-cursor";
+        cursorSpan.innerHTML = "&nbsp;";
+        element.appendChild(cursorSpan);
+    }
+
+    let charIndex = 0;
+    function nextChar() {
+        if (charIndex < text.length) {
+            const char = text.charAt(charIndex);
+            charIndex++;
+            const textNode = document.createTextNode(char);
+            if (cursorSpan && cursorSpan.parentNode === element) {
+                element.insertBefore(textNode, cursorSpan);
+            } else {
+                element.appendChild(textNode);
+            }
+            const jitter = Math.floor(Math.random() * 6) - 3;
+            element._termTimer = setTimeout(nextChar, Math.max(6, speed + jitter));
+        } else {
+            element._termTimer = null;
+            if (options.removeCursorAfter) {
+                setTimeout(() => {
+                    if (cursorSpan && cursorSpan.parentNode === element) {
+                        cursorSpan.remove();
+                    }
+                }, options.removeCursorAfter);
+            }
+            if (onComplete) onComplete();
+        }
+    }
+
+    nextChar();
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     initInputListeners();
     if (playerId) {
@@ -154,8 +210,14 @@ function renderPlayerView(state) {
         case "INSTRUCTIONS":
             clearInterval(playerCountdown);
             showScreen("screen-instructions");
-            document.getElementById("player-inst-title").innerText = state.title || "Next Minigame";
-            document.getElementById("player-inst-text").innerText = state.instruction || "";
+            const pTitle = document.getElementById("player-inst-title");
+            if (pTitle) pTitle.innerText = state.title || "Next Minigame";
+            const instEl = document.getElementById("player-inst-text");
+            const instText = state.instruction || "";
+            if (instEl && (isPhaseOrRoundChanged || instEl.getAttribute("data-typed-text") !== instText)) {
+                instEl.setAttribute("data-typed-text", instText);
+                typeTerminalText(instEl, instText, { speed: 15, cursor: true });
+            }
             break;
 
         case "SUBMITTING":
@@ -386,7 +448,12 @@ function renderSubmittingScreen(state, isPromptChanged) {
     const promptData = state.prompt || {};
     currentPromptType = promptData.type || "text";
 
-    document.getElementById("prompt-heading").innerText = promptData.prompt_text || "Enter your response:";
+    const promptHeading = document.getElementById("prompt-heading");
+    const pHeadText = promptData.prompt_text || "Enter your response:";
+    if (promptHeading && (isPromptChanged || promptHeading.getAttribute("data-typed-text") !== pHeadText)) {
+        promptHeading.setAttribute("data-typed-text", pHeadText);
+        typeTerminalText(promptHeading, pHeadText, { speed: 18, cursor: true });
+    }
 
     // Reset inputs when prompt changes
     if (isPromptChanged) {
@@ -401,7 +468,7 @@ function renderSubmittingScreen(state, isPromptChanged) {
         clearTimeout(draftSyncTimer);
 
         // Start countdown timer for this prompt
-        startMobileTimer(state.submission_timeout || 25, "player-submit-seconds", () => {
+        startMobileTimer(state.submission_timeout || 30, "player-submit-seconds", () => {
             submitAnswer(true);
         });
     } else if (state.draft && !state.has_submitted) {
@@ -436,7 +503,7 @@ function renderSubmittingScreen(state, isPromptChanged) {
         if (promptData.image_url) {
             document.getElementById("player-captcha-img").src = promptData.image_url;
         }
-        document.getElementById("single-response-input").placeholder = promptData.placeholder || "Describe what is happening in this image...";
+        document.getElementById("single-response-input").placeholder = promptData.placeholder || "Describe what is depicted in this image...";
     } else {
         singleBox.style.display = "block";
         multiBox.style.display = "none";
@@ -515,8 +582,12 @@ function renderVotingScreen(state, isVoteChanged) {
 
     const reminderEl = document.getElementById("player-voting-prompt-reminder");
     if (reminderEl) {
-        reminderEl.innerText = state.prompt_text ? `Prompt: ${state.prompt_text}` : "";
+        const pText = state.prompt_text ? `Prompt: ${state.prompt_text}` : "";
         reminderEl.style.display = state.prompt_text ? "block" : "none";
+        if (pText && (isVoteChanged || reminderEl.getAttribute("data-typed-text") !== pText)) {
+            reminderEl.setAttribute("data-typed-text", pText);
+            typeTerminalText(reminderEl, `>> PROMPT: ${pText}`, { speed: 14, cursor: true });
+        }
     }
 
     if (state.has_voted) {

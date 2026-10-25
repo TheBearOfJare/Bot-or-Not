@@ -55,6 +55,11 @@ class GameManager:
                 for p in self.players.values():
                     p["score"] = 0
                     self.player_history[p["id"]] = []
+    @property
+    def current_submission_timeout(self) -> int:
+        if self.current_game and getattr(self.current_game, "game_id", None) == "survey":
+            return getattr(self.config, "SUBMISSION_TIMEOUT_SURVEY", 40)
+        return getattr(self.config, "SUBMISSION_TIMEOUT", 30)
 
     def set_game_sequence(self, sequence: List[str]):
         """Allow host to customize which minigames are played and in what order."""
@@ -474,7 +479,7 @@ class GameManager:
             "join_url": f"http://{self.config.LOCAL_IP}:{self.config.PORT}/player",
             "scores_hidden": not is_game_over,
             "max_votes_per_player": max_votes,
-            "submission_timeout": self.config.SUBMISSION_TIMEOUT,
+            "submission_timeout": self.current_submission_timeout,
             "voting_timeout": self.config.VOTING_TIMEOUT,
             "rankings": self.last_round_rankings,
             "question_info": {
@@ -598,7 +603,7 @@ class GameManager:
                 "score_display": f"{player['score']} pts"
             },
             "round_number": self.round_number,
-            "submission_timeout": self.config.SUBMISSION_TIMEOUT,
+            "submission_timeout": self.current_submission_timeout,
             "voting_timeout": self.config.VOTING_TIMEOUT,
             "max_votes_per_player": max_votes,
             "round_summary": round_summary,
