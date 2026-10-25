@@ -40,6 +40,9 @@ class Config:
     # Default minigame order
     DEFAULT_GAME_SEQUENCE = ["pun", "review", "survey", "captcha", "bonus"]
 
+    # Number of questions/prompts per minigame (default 3, configurable in settings)
+    QUESTIONS_PER_MINIGAME = int(os.getenv("QUESTIONS_PER_MINIGAME", 3))
+
     # Game Scoring Rules
     POINTS_CORRECT_BOT = 100                  # Points for correctly identifying a bot
     POINTS_MISTAKEN_FOR_BOT_PENALTY = -25    # Human loses points when other players mistake them for a bot!

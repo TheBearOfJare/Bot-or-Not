@@ -5,7 +5,10 @@ let playerName = localStorage.getItem("bot_or_not_player_name");
 let playerPollTimer = null;
 let currentPromptType = "text";
 let lastSubmissionRound = -1;
+let lastSubmissionQuestionIdx = -1;
 let lastVotingRound = -1;
+let lastVotingQuestionIdx = -1;
+let lastStateCached = null;
 
 // Timers and multi-select state
 let playerCountdown = null;
@@ -61,6 +64,10 @@ async function handleJoin(e) {
             localStorage.setItem("bot_or_not_player_name", playerName);
             currentPhaseCached = null;
             currentRoundCached = null;
+            lastSubmissionRound = -1;
+            lastSubmissionQuestionIdx = -1;
+            lastVotingRound = -1;
+            lastVotingQuestionIdx = -1;
             bonusGuesses = {};
             selectedVoteIds = [];
             startPolling();
@@ -84,6 +91,10 @@ function leaveGame(e) {
     selectedVoteIds = [];
     currentPhaseCached = null;
     currentRoundCached = null;
+    lastSubmissionRound = -1;
+    lastSubmissionQuestionIdx = -1;
+    lastVotingRound = -1;
+    lastVotingQuestionIdx = -1;
     document.getElementById("player-name-input").value = "";
     document.getElementById("player-status-bar").style.display = "none";
     showScreen("screen-join");
@@ -107,6 +118,7 @@ async function pollPlayerState() {
                 showScreen("screen-join");
                 return;
             }
+            lastStateCached = state;
             renderPlayerView(state);
         }
     } catch (err) {
@@ -115,14 +127,21 @@ async function pollPlayerState() {
 }
 
 function renderPlayerView(state) {
-    // Update player header badge - scores remain classified during intermediate rounds
+    // Update player header badge with secret score visible to player
     if (state.player) {
         document.getElementById("player-status-bar").style.display = "block";
         document.getElementById("player-display-name").innerText = state.player.name;
-        document.getElementById("player-display-score").innerText = state.player.score_display || "Encrypted 🔒";
+        document.getElementById("player-display-score").innerText = state.player.score_display || `${state.player.score || 0} pts`;
     }
 
+    const qInfo = state.question_info || {};
+    const currPromptIdx = qInfo.current_prompt_index ?? (state.question_index ?? 0);
+    const currVoteIdx = qInfo.current_vote_index ?? (state.question_index ?? 0);
+
     const isPhaseOrRoundChanged = (currentPhaseCached !== state.phase || currentRoundCached !== state.round_number);
+    const isPromptChanged = isPhaseOrRoundChanged || (state.phase === "SUBMITTING" && lastSubmissionQuestionIdx !== currPromptIdx);
+    const isVoteChanged = isPhaseOrRoundChanged || (state.phase === "VOTING" && lastVotingQuestionIdx !== currVoteIdx);
+
     currentPhaseCached = state.phase;
     currentRoundCached = state.round_number;
 
@@ -140,28 +159,17 @@ function renderPlayerView(state) {
             break;
 
         case "SUBMITTING":
-            renderSubmittingScreen(state, isPhaseOrRoundChanged);
+            renderSubmittingScreen(state, isPromptChanged);
             break;
 
         case "VOTING":
-            renderVotingScreen(state, isPhaseOrRoundChanged);
+            renderVotingScreen(state, isVoteChanged);
             break;
 
         case "REVEAL":
-        case "BONUS_REVEAL":
-            clearInterval(playerCountdown);
-            showScreen("screen-watch-tv");
-            document.getElementById("watch-tv-title").innerText = "The Reveal!";
-            document.getElementById("watch-tv-desc").innerText = "Watch the TV screen to see who was a bot!";
-            document.getElementById("player-round-score-notice").innerText = "";
-            break;
-
         case "SCOREBOARD":
-            clearInterval(playerCountdown);
-            showScreen("screen-watch-tv");
-            document.getElementById("watch-tv-title").innerText = "Scores are Classified!";
-            document.getElementById("watch-tv-desc").innerText = "Results are hidden until the final evaluation!";
-            document.getElementById("player-round-score-notice").innerText = "";
+        case "BONUS_REVEAL":
+            renderWatchTvScreen(state);
             break;
 
         case "BONUS":
@@ -173,9 +181,77 @@ function renderPlayerView(state) {
             clearInterval(playerCountdown);
             showScreen("screen-watch-tv");
             document.getElementById("watch-tv-title").innerText = "Game Over!";
-            document.getElementById("watch-tv-desc").innerText = "Look at the main screen for the grand winner!";
-            document.getElementById("player-round-score-notice").innerText = "";
+            document.getElementById("watch-tv-desc").innerText = "Look at the main screen for the grand champion!";
+            const rpt = document.getElementById("player-score-report");
+            if (rpt) rpt.style.display = "none";
             break;
+    }
+}
+
+// --- Watch TV Screen (Reveals & Confidential Scorecard) ---
+function renderWatchTvScreen(state) {
+    clearInterval(playerCountdown);
+    showScreen("screen-watch-tv");
+
+    const titleEl = document.getElementById("watch-tv-title");
+    const descEl = document.getElementById("watch-tv-desc");
+    const scoreReport = document.getElementById("player-score-report");
+
+    if (state.phase === "SCOREBOARD") {
+        titleEl.innerText = "Standings on the TV!";
+        descEl.innerText = "Check the TV for ranking movements, and keep your secret score safe below.";
+    } else if (state.phase === "REVEAL") {
+        titleEl.innerText = "The Reveal on the TV!";
+        descEl.innerText = "Watch the main screen to see which answers were bots!";
+    } else if (state.phase === "BONUS_REVEAL") {
+        titleEl.innerText = "Dossier Reveal!";
+        descEl.innerText = "Watch the main screen to see who wrote which dossier!";
+    }
+
+    const summary = state.round_summary;
+    if (summary && scoreReport) {
+        scoreReport.style.display = "block";
+
+        const roundVal = document.getElementById("player-round-score-val");
+        if (roundVal) {
+            roundVal.innerText = summary.round_score_display || "+0 pts";
+            if (summary.round_score > 0) {
+                roundVal.style.color = "#34d399";
+            } else if (summary.round_score < 0) {
+                roundVal.style.color = "#f87171";
+            } else {
+                roundVal.style.color = "#9ca3af";
+            }
+        }
+
+        const totalVal = document.getElementById("player-total-score-val");
+        if (totalVal) {
+            totalVal.innerText = summary.total_score_display || `${state.player?.score || 0} pts`;
+        }
+
+        const rankVal = document.getElementById("player-rank-movement-val");
+        if (rankVal) {
+            rankVal.innerText = `#${summary.rank || 1} (${summary.rank_change_display || '―'})`;
+        }
+
+        const breakdownList = document.getElementById("player-breakdown-list");
+        if (breakdownList) {
+            const items = summary.breakdown || [];
+            if (items.length > 0) {
+                breakdownList.innerHTML = items.map(b => `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 0.9rem;">
+                        <span style="color: #d1d5db;">Prompt ${b.question_number}:</span>
+                        <span style="font-weight: 700; color: ${b.points > 0 ? '#34d399' : (b.points < 0 ? '#f87171' : '#9ca3af')};">
+                            ${escapeHtml(b.points_display)}
+                        </span>
+                    </div>
+                `).join("");
+            } else {
+                breakdownList.innerHTML = `<span style="color: #9ca3af; font-size: 0.85rem;">Points recorded for this round.</span>`;
+            }
+        }
+    } else if (scoreReport) {
+        scoreReport.style.display = "none";
     }
 }
 
@@ -220,6 +296,8 @@ async function sendDraftUpdate(payload) {
     lastSentDraftJson = jsonStr;
     lastDraftSentTime = Date.now();
 
+    const currQIdx = lastStateCached?.question_info?.current_prompt_index ?? (lastStateCached?.question_index ?? 0);
+
     try {
         await fetch("/api/submit", {
             method: "POST",
@@ -228,7 +306,8 @@ async function sendDraftUpdate(payload) {
                 player_id: playerId,
                 response: payload,
                 locked: false,
-                version: lastDraftSentTime
+                version: lastDraftSentTime,
+                question_index: currQIdx
             })
         });
     } catch (err) {
@@ -271,16 +350,33 @@ function initInputListeners() {
 }
 
 // --- Submitting Phase ---
-function renderSubmittingScreen(state, isPhaseChanged) {
+function renderSubmittingScreen(state, isPromptChanged) {
     showScreen("screen-submitting");
     const formBox = document.getElementById("submitting-form-container");
     const doneBox = document.getElementById("submitting-done-container");
+
+    const qInfo = state.question_info || {};
+    const currPromptNum = qInfo.current_prompt_number || (state.question_number || 1);
+    const totalQ = qInfo.total_questions || (state.total_questions || 3);
+    const currPromptIdx = qInfo.current_prompt_index ?? (state.question_index ?? 0);
+
+    const stepTag = document.getElementById("player-prompt-step-tag");
+    if (stepTag) stepTag.innerText = `Prompt ${currPromptNum} of ${totalQ}`;
 
     if (state.has_submitted) {
         clearInterval(playerCountdown);
         clearTimeout(draftSyncTimer);
         formBox.style.display = "none";
         doneBox.style.display = "block";
+
+        const doneDesc = document.getElementById("submitting-done-desc");
+        if (doneDesc) {
+            if (currPromptNum < totalQ) {
+                doneDesc.innerText = `Prompt ${currPromptNum} of ${totalQ} locked in! Waiting for next prompt...`;
+            } else {
+                doneDesc.innerText = "All prompts submitted! Waiting for voting phase...";
+            }
+        }
         return;
     }
 
@@ -292,9 +388,10 @@ function renderSubmittingScreen(state, isPhaseChanged) {
 
     document.getElementById("prompt-heading").innerText = promptData.prompt_text || "Enter your response:";
 
-    // Reset inputs if new round
-    if (lastSubmissionRound !== state.round_number) {
+    // Reset inputs when prompt changes
+    if (isPromptChanged) {
         lastSubmissionRound = state.round_number;
+        lastSubmissionQuestionIdx = currPromptIdx;
         document.getElementById("single-response-input").value = "";
         document.getElementById("survey-input-1").value = "";
         document.getElementById("survey-input-2").value = "";
@@ -302,8 +399,13 @@ function renderSubmittingScreen(state, isPhaseChanged) {
         lastSentDraftJson = null;
         lastDraftSentTime = 0;
         clearTimeout(draftSyncTimer);
+
+        // Start countdown timer for this prompt
+        startMobileTimer(state.submission_timeout || 25, "player-submit-seconds", () => {
+            submitAnswer(true);
+        });
     } else if (state.draft && !state.has_submitted) {
-        // Restore draft from server if input is currently empty (e.g. after phone refresh)
+        // Restore draft from server if input is currently empty
         const singleInput = document.getElementById("single-response-input");
         const s1 = document.getElementById("survey-input-1");
         const s2 = document.getElementById("survey-input-2");
@@ -317,14 +419,6 @@ function renderSubmittingScreen(state, isPhaseChanged) {
         } else if (typeof state.draft === "string" && !singleInput.value) {
             singleInput.value = state.draft;
         }
-    }
-
-    // Start 25s submit timer
-    if (isPhaseChanged) {
-        startMobileTimer(state.submission_timeout || 25, "player-submit-seconds", () => {
-            // Auto submit whatever is typed
-            submitAnswer(true);
-        });
     }
 
     const singleBox = document.getElementById("input-single-container");
@@ -382,6 +476,8 @@ async function submitAnswer(isAutoTimeout = false) {
         doneBox.style.display = "block";
     }
 
+    const currQIdx = lastStateCached?.question_info?.current_prompt_index ?? (lastStateCached?.question_index ?? 0);
+
     try {
         const res = await fetch("/api/submit", {
             method: "POST",
@@ -390,7 +486,8 @@ async function submitAnswer(isAutoTimeout = false) {
                 player_id: playerId,
                 response: payload,
                 locked: true,
-                version: Date.now()
+                version: Date.now(),
+                question_index: currQIdx
             })
         });
         const data = await res.json();
@@ -403,15 +500,38 @@ async function submitAnswer(isAutoTimeout = false) {
 }
 
 // --- Voting Phase ---
-function renderVotingScreen(state, isPhaseChanged) {
+function renderVotingScreen(state, isVoteChanged) {
     showScreen("screen-voting");
     const choicesBox = document.getElementById("voting-choices-container");
     const doneBox = document.getElementById("voting-done-container");
+
+    const qInfo = state.question_info || {};
+    const currVoteNum = qInfo.current_vote_number || (state.question_number || 1);
+    const totalQ = qInfo.total_questions || (state.total_questions || 3);
+    const currVoteIdx = qInfo.current_vote_index ?? (state.question_index ?? 0);
+
+    const stepTag = document.getElementById("player-voting-step-tag");
+    if (stepTag) stepTag.innerText = `Voting Set ${currVoteNum} of ${totalQ}`;
+
+    const reminderEl = document.getElementById("player-voting-prompt-reminder");
+    if (reminderEl) {
+        reminderEl.innerText = state.prompt_text ? `Prompt: ${state.prompt_text}` : "";
+        reminderEl.style.display = state.prompt_text ? "block" : "none";
+    }
 
     if (state.has_voted) {
         clearInterval(playerCountdown);
         choicesBox.style.display = "none";
         doneBox.style.display = "block";
+
+        const doneDesc = document.getElementById("voting-done-desc");
+        if (doneDesc) {
+            if (currVoteNum < totalQ) {
+                doneDesc.innerText = `Vote for Set ${currVoteNum} of ${totalQ} locked in! Next voting set coming up...`;
+            } else {
+                doneDesc.innerText = "All votes locked in! Watch the TV screen for the reveal!";
+            }
+        }
         return;
     }
 
@@ -433,7 +553,9 @@ function renderVotingScreen(state, isPhaseChanged) {
         if (lockBtn) lockBtn.style.display = "none";
     }
 
-    if (isPhaseChanged) {
+    if (isVoteChanged) {
+        lastVotingRound = state.round_number;
+        lastVotingQuestionIdx = currVoteIdx;
         selectedVoteIds = [];
         updateMultiVoteButton();
         startMobileTimer(state.voting_timeout || 25, "player-vote-seconds", null);
@@ -447,9 +569,9 @@ function renderVotingScreen(state, isPhaseChanged) {
         return;
     }
 
-    // Guard: Prevent re-rendering option cards every second while voting
+    // Guard: Prevent re-rendering option cards every second while voting unless question changed
     const existingOptionCards = optionsContainer.querySelectorAll(".option-card");
-    if (existingOptionCards.length > 0 && !isPhaseChanged) {
+    if (existingOptionCards.length > 0 && !isVoteChanged) {
         return;
     }
 
@@ -539,11 +661,17 @@ async function submitMultiVotes() {
 
 async function submitVotes(optionIds) {
     clearInterval(playerCountdown);
+    const currQIdx = lastStateCached?.question_info?.current_vote_index ?? (lastStateCached?.question_index ?? 0);
+
     try {
         const res = await fetch("/api/vote", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ player_id: playerId, target_option_ids: optionIds })
+            body: JSON.stringify({
+                player_id: playerId,
+                target_option_ids: optionIds,
+                question_index: currQIdx
+            })
         });
         const data = await res.json();
         if (data.success) {
@@ -603,7 +731,7 @@ function renderBonusScreen(state, isPhaseOrRoundChanged) {
                 </div>
                 ${d.items.map(it => `
                     <div class="dossier-response-item">
-                        <div style="font-size: 0.75rem; color: #9ca3af;">${escapeHtml(it.game_title)}:</div>
+                        <div style="font-size: 0.75rem; color: #9ca3af;">${escapeHtml(it.game_title)}${it.question_num ? ` (Q${it.question_num})` : ''}:</div>
                         <div style="font-style: italic;">${Array.isArray(it.response) ? it.response.join(", ") : escapeHtml(it.response)}</div>
                     </div>
                 `).join("")}
@@ -628,7 +756,6 @@ function handleBonusSelectChange(dossierId, selectedPlayerId) {
 }
 
 async function submitBonusMatches() {
-    // Read from both the DOM selects and bonusGuesses
     const cards = document.querySelectorAll("#bonus-dossiers-list .dossier-card");
     cards.forEach(card => {
         const dossierId = card.getAttribute("data-dossier-id");

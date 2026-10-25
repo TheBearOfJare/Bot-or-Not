@@ -5,6 +5,9 @@ let pollTimer = null;
 let countdownInterval = null;
 let countdownSeconds = 0;
 let lastRenderedPhase = null;
+let lastPromptIndex = -1;
+let lastVoteIndex = -1;
+let lastRevealIndex = -1;
 
 // Initialize on page load
 document.addEventListener("DOMContentLoaded", () => {
@@ -41,34 +44,46 @@ function renderHostView(state) {
         }
     });
 
-    // Detect phase change for timers
-    const isNewPhase = (lastRenderedPhase !== state.phase);
+    const qInfo = state.question_info || {};
+    const currPromptIdx = qInfo.current_prompt_index ?? 0;
+    const currVoteIdx = qInfo.current_vote_index ?? 0;
+    const currRevIdx = qInfo.current_reveal_index ?? 0;
+
+    // Detect phase and sub-step changes for timer resets
+    const isPhaseChanged = (lastRenderedPhase !== state.phase);
+    const isNewPrompt = isPhaseChanged || (state.phase === "SUBMITTING" && lastPromptIndex !== currPromptIdx);
+    const isNewVote = isPhaseChanged || (state.phase === "VOTING" && lastVoteIndex !== currVoteIdx);
+    const isNewReveal = isPhaseChanged || (state.phase === "REVEAL" && lastRevealIndex !== currRevIdx);
+
     lastRenderedPhase = state.phase;
+    lastPromptIndex = currPromptIdx;
+    lastVoteIndex = currVoteIdx;
+    lastRevealIndex = currRevIdx;
 
     switch (state.phase) {
         case "LOBBY":
             renderLobby(state);
             break;
         case "INSTRUCTIONS":
-            renderInstructions(state, isNewPhase);
+            renderInstructions(state, isPhaseChanged);
             break;
         case "SUBMITTING":
-            renderSubmitting(state, isNewPhase);
+            renderSubmitting(state, isNewPrompt);
             break;
         case "VOTING":
-            renderVoting(state, isNewPhase);
+            renderVoting(state, isNewVote);
             break;
         case "REVEAL":
-            renderReveal(state, isNewPhase);
+            renderReveal(state, isNewReveal);
             break;
         case "SCOREBOARD":
-            renderScoreboard(state, isNewPhase);
+            renderScoreboard(state, isPhaseChanged);
             break;
         case "BONUS":
             renderBonus(state);
             break;
         case "BONUS_REVEAL":
-            renderBonusReveal(state, isNewPhase);
+            renderBonusReveal(state, isPhaseChanged);
             break;
         case "GAME_OVER":
             renderGameOver(state);
@@ -107,6 +122,12 @@ function renderLobby(state) {
         `).join("");
     }
 
+    // Update active state of questions per minigame buttons
+    const qCount = state.questions_per_minigame || 3;
+    document.querySelectorAll(".btn-setting").forEach(btn => {
+        btn.classList.toggle("active", btn.id === `btn-q-${qCount}`);
+    });
+
     // Minigame playlist configuration checkboxes
     const playlistContainer = document.getElementById("playlist-container");
     if (playlistContainer.children.length === 0 && state.available_games) {
@@ -122,6 +143,23 @@ function renderLobby(state) {
                 </label>
             </div>
         `).join("");
+    }
+}
+
+async function setQuestionsCount(count) {
+    document.querySelectorAll(".btn-setting").forEach(btn => btn.classList.remove("active"));
+    const btn = document.getElementById(`btn-q-${count}`);
+    if (btn) btn.classList.add("active");
+
+    try {
+        await fetch("/api/set_settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ questions_per_minigame: count })
+        });
+        pollHostState();
+    } catch (err) {
+        console.error("Failed to update questions count:", err);
     }
 }
 
@@ -157,10 +195,16 @@ async function startGame() {
         const checked = Array.from(document.querySelectorAll("#playlist-container input[type='checkbox']:checked"))
             .map(cb => cb.value);
 
+        const activeBtn = document.querySelector(".btn-setting.active");
+        const questionsCount = activeBtn ? parseInt(activeBtn.id.replace("btn-q-", ""), 10) : 3;
+
         const res = await fetch("/api/start", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ sequence: checked.length > 0 ? checked : null })
+            body: JSON.stringify({ 
+                sequence: checked.length > 0 ? checked : null,
+                questions_per_minigame: questionsCount
+            })
         });
         const data = await res.json();
         if (data && data.state) {
@@ -182,7 +226,13 @@ async function startGame() {
 
 // --- Phase 2: Instructions ---
 function renderInstructions(state, isNewPhase) {
+    const qInfo = state.question_info || {};
+    const totalQ = qInfo.total_questions || state.questions_per_minigame || 3;
+
     document.getElementById("instructions-round-tag").innerText = `Round ${state.round_number} of ${state.total_rounds}`;
+    const qTag = document.getElementById("instructions-questions-tag");
+    if (qTag) qTag.innerText = `${totalQ} Prompts`;
+
     if (state.game_info) {
         document.getElementById("instructions-game-title").innerText = state.game_info.title;
         document.getElementById("instructions-text").innerText = state.game_info.instruction;
@@ -194,11 +244,18 @@ function renderInstructions(state, isNewPhase) {
 }
 
 // --- Phase 3: Submitting ---
-function renderSubmitting(state, isNewPhase) {
+function renderSubmitting(state, isNewPrompt) {
+    const qInfo = state.question_info || {};
+    const totalQ = qInfo.total_questions || state.questions_per_minigame || 3;
+    const currPromptNum = qInfo.current_prompt_number || 1;
+
     document.getElementById("submitting-round-tag").innerText = `Round ${state.round_number} of ${state.total_rounds}`;
+    const qTag = document.getElementById("submitting-question-tag");
+    if (qTag) qTag.innerText = `Prompt ${currPromptNum} of ${totalQ}`;
+
     if (state.game_info) {
         document.getElementById("submitting-game-title").innerText = state.game_info.title;
-        const promptData = state.game_info.prompt_data;
+        const promptData = state.game_info.prompt_data || {};
         document.getElementById("submitting-prompt-text").innerText = promptData.prompt_text || "";
 
         // Check if image captcha
@@ -212,7 +269,7 @@ function renderSubmitting(state, isNewPhase) {
         }
     }
 
-    if (isNewPhase) {
+    if (isNewPrompt) {
         startCountdown(state.submission_timeout || 25, "submitting-timer", advancePhase);
     }
 
@@ -230,10 +287,23 @@ function renderSubmitting(state, isNewPhase) {
 }
 
 // --- Phase 4: Voting ---
-function renderVoting(state, isNewPhase) {
+function renderVoting(state, isNewVote) {
+    const qInfo = state.question_info || {};
+    const totalQ = qInfo.total_questions || state.questions_per_minigame || 3;
+    const currVoteNum = qInfo.current_vote_number || 1;
+
     if (state.game_info) {
         document.getElementById("voting-game-title").innerText = state.game_info.title;
+        const promptData = state.game_info.prompt_data || {};
+        const reminderEl = document.getElementById("voting-prompt-reminder");
+        if (reminderEl) {
+            reminderEl.innerText = promptData.prompt_text ? `Prompt: ${promptData.prompt_text}` : "";
+            reminderEl.style.display = promptData.prompt_text ? "block" : "none";
+        }
     }
+
+    const qTag = document.getElementById("voting-question-tag");
+    if (qTag) qTag.innerText = `Voting Set ${currVoteNum} of ${totalQ}`;
 
     const maxVotes = state.max_votes_per_player || 1;
     const headerTitle = document.getElementById("voting-header-title");
@@ -246,7 +316,7 @@ function renderVoting(state, isNewPhase) {
         if (headerSubtitle) headerSubtitle.innerText = "Vote on your phone now!";
     }
 
-    if (isNewPhase) {
+    if (isNewVote) {
         startCountdown(state.voting_timeout || 25, "voting-timer", advancePhase);
     }
 
@@ -282,10 +352,27 @@ function renderVoting(state, isNewPhase) {
 }
 
 // --- Phase 5: Reveal ---
-function renderReveal(state, isNewPhase) {
+function renderReveal(state, isNewReveal) {
+    const qInfo = state.question_info || {};
+    const totalQ = qInfo.total_questions || state.questions_per_minigame || 3;
+    const currRevNum = qInfo.current_reveal_number || 1;
+
+    const qTag = document.getElementById("reveal-question-tag");
+    if (qTag) qTag.innerText = `Question ${currRevNum} of ${totalQ}`;
+
+    const revealData = state.reveal_data || {};
+    const promptReminder = document.getElementById("reveal-prompt-reminder");
+    if (promptReminder) {
+        const pText = revealData.active_prompt_data?.prompt_text || "";
+        promptReminder.innerText = pText ? `Prompt: ${pText}` : "";
+        promptReminder.style.display = pText ? "block" : "none";
+    }
+
     const container = document.getElementById("reveal-cards-container");
-    if (state.reveal_data && state.reveal_data.reveal_cards) {
-        container.innerHTML = state.reveal_data.reveal_cards.map(card => {
+    const cards = revealData.reveal_cards || [];
+
+    if (cards.length > 0) {
+        container.innerHTML = cards.map(card => {
             const isBot = card.is_bot;
             const content = Array.isArray(card.response) 
                 ? `<ol style="margin-left: 20px;">${card.response.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ol>`
@@ -299,7 +386,7 @@ function renderReveal(state, isNewPhase) {
                 ? `<div style="color: #6ee7b7; font-weight: 600; margin-top: 6px;">🎯 Identified as BOT! (+100 pts to voters)</div>`
                 : (card.vote_count > 0 
                     ? `<div style="color: #f87171; font-weight: 600; margin-top: 6px;">⚠️ Fooled fellow humans! (-25 pts penalty per vote to author for failing to blend in)</div>` 
-                    : `<div style="color: #9ca3af; margin-top: 6px;">Nobody voted for this as a bot. Clean blend-in!</div>`);
+                    : `<div style="color: #9ca3af; margin-top: 6px;">Clearly human, no votes.</div>`);
 
             return `
                 <div class="reveal-card ${isBot ? 'bot' : 'human'}">
@@ -319,21 +406,40 @@ function renderReveal(state, isNewPhase) {
         }).join("");
     }
 
-    if (isNewPhase) {
+    if (isNewReveal) {
         startCountdown(10, "reveal-timer", advancePhase);
+        const bottomTimer = document.getElementById("reveal-timer-bottom");
+        if (bottomTimer) bottomTimer.innerText = "10";
     }
 }
 
-// --- Phase 6: Scoreboard (Classified / Redacted) ---
+// --- Phase 6: Scoreboard (Classified Standings & Ranking Changes) ---
 function renderScoreboard(state, isNewPhase) {
     const tbody = document.getElementById("scoreboard-body");
-    tbody.innerHTML = state.players.map((p, i) => `
-        <tr>
-            <td style="font-weight: 700; color: #9ca3af;">🔒 Classified</td>
-            <td style="font-weight: 700;">${escapeHtml(p.name)}</td>
-            <td><span class="classified-score">${escapeHtml(p.score_display || '█████ [CLASSIFIED]')}</span></td>
-        </tr>
-    `).join("");
+    const rankings = state.rankings || [];
+
+    if (rankings.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#9ca3af;">Computing ranking changes...</td></tr>`;
+    } else {
+        tbody.innerHTML = rankings.map((r, i) => {
+            const rankBadge = i === 0 ? '🥇 1st' : (i === 1 ? '🥈 2nd' : (i === 2 ? '🥉 3rd' : `#${r.rank}`));
+            let moveBadge = `<span class="badge-movement badge-movement-none">―</span>`;
+            if (r.rank_change > 0) {
+                moveBadge = `<span class="badge-movement badge-movement-up">▲ ${r.rank_change}</span>`;
+            } else if (r.rank_change < 0) {
+                moveBadge = `<span class="badge-movement badge-movement-down">▼ ${Math.abs(r.rank_change)}</span>`;
+            }
+
+            return `
+                <tr>
+                    <td class="rank-badge" style="font-size: 1.25rem;">${rankBadge}</td>
+                    <td style="font-weight: 700; font-size: 1.25rem;">${escapeHtml(r.name)}</td>
+                    <td>${moveBadge}</td>
+                    <td><span class="classified-score">${escapeHtml(r.score_display || '█████ [CLASSIFIED]')}</span></td>
+                </tr>
+            `;
+        }).join("");
+    }
 
     if (isNewPhase) {
         startCountdown(8, "scoreboard-timer", advancePhase);
@@ -352,7 +458,7 @@ function renderBonus(state) {
                 <div style="font-weight: 800; color: #fbbf24; margin-bottom: 8px;">📁 ${escapeHtml(d.label)}</div>
                 ${d.items.map(item => `
                     <div class="dossier-response-item">
-                        <div style="font-size: 0.8rem; color: #9ca3af;">${escapeHtml(item.game_title)}:</div>
+                        <div style="font-size: 0.8rem; color: #9ca3af;">${escapeHtml(item.game_title)}${item.question_num ? ` (Q${item.question_num})` : ''}:</div>
                         <div style="font-style: italic;">${Array.isArray(item.response) ? item.response.join(", ") : escapeHtml(item.response)}</div>
                     </div>
                 `).join("")}
@@ -391,7 +497,7 @@ function renderBonusReveal(state, isNewPhase) {
                     <div style="margin: 12px 0;">
                         ${d.items.map(item => `
                             <div class="dossier-response-item">
-                                <span style="color: #93c5fd; font-weight: 600;">${escapeHtml(item.game_title)}:</span>
+                                <span style="color: #93c5fd; font-weight: 600;">${escapeHtml(item.game_title)}${item.question_num ? ` (Q${item.question_num})` : ''}:</span>
                                 <span>${Array.isArray(item.response) ? item.response.join(", ") : escapeHtml(item.response)}</span>
                             </div>
                         `).join("")}
@@ -434,9 +540,15 @@ function startCountdown(seconds, elementId, callback) {
     const el = document.getElementById(elementId);
     if (el) el.innerText = countdownSeconds;
 
+    const bottomRev = document.getElementById("reveal-timer-bottom");
+    if (elementId === "reveal-timer" && bottomRev) bottomRev.innerText = countdownSeconds;
+
     countdownInterval = setInterval(() => {
         countdownSeconds -= 1;
-        if (el) el.innerText = Math.max(0, countdownSeconds);
+        const curSec = Math.max(0, countdownSeconds);
+        if (el) el.innerText = curSec;
+        if (elementId === "reveal-timer" && bottomRev) bottomRev.innerText = curSec;
+
         if (countdownSeconds <= 0) {
             clearInterval(countdownInterval);
             if (callback) callback();

@@ -1,4 +1,5 @@
 import random
+from typing import Dict, Any
 from game.minigames.base import BaseMinigame
 
 REVIEW_PRODUCTS = [
@@ -46,53 +47,132 @@ REVIEW_PRODUCTS = [
             "Absorbed nothing and tore in half",
             "Super thin and completely useless"
         ]
+    },
+    {
+        "product": "A pair of generic white athletic socks",
+        "fallbacks": [
+            "Got holes in the toe on the very first step",
+            "Slid down into my shoes every three seconds",
+            "One sock was mysteriously three inches shorter",
+            "Turned into tissue paper after one gentle wash"
+        ]
+    },
+    {
+        "product": "An ordinary metal paperclip",
+        "fallbacks": [
+            "Bent out of shape trying to hold two sheets",
+            "Rust immediately appeared in humid air",
+            "Tore through my important tax documents",
+            "Snapped in half when unbending"
+        ]
+    },
+    {
+        "product": "A standard wooden toothpick",
+        "fallbacks": [
+            "Splintered right between my back molars",
+            "Snapped under the slightest pressure",
+            "Tasted heavily like tree bark and dirt",
+            "Completely blunt, did not pick anything"
+        ]
+    },
+    {
+        "product": "A basic USB-A wall charger",
+        "fallbacks": [
+            "Took 11 hours to charge my phone 3 percent",
+            "Emitted a high-pitched buzzing screech all night",
+            "Heated up enough to toast an english muffin",
+            "Prongs bent instantly plugging into the wall"
+        ]
+    },
+    {
+        "product": "A roll of clear cellophane tape",
+        "fallbacks": [
+            "Could never find the tape edge again",
+            "Tore diagonally every single time I pulled",
+            "Completely lost its stickiness within five minutes",
+            "Ripped the paint clean off my wall"
+        ]
+    },
+    {
+        "product": "A bag of plain ice cubes",
+        "fallbacks": [
+            "Melted completely into water, total ripoff",
+            "Way too cold to enjoy comfortably",
+            "All stuck together in one giant unyielding brick",
+            "Tasted vaguely like the bottom of a freezer"
+        ]
+    },
+    {
+        "product": "A retractable blue ballpoint pen",
+        "fallbacks": [
+            "Exploded blue ink inside my favorite shirt",
+            "Clicker got jammed permanently down on day two",
+            "Scratched deep grooves into the paper without inking",
+            "Skipped every other letter I attempted to write"
+        ]
     }
 ]
 
 class OneStarReviewGame(BaseMinigame):
-    def __init__(self, bot_engine, bot_count: int = 1):
+    def __init__(self, bot_engine, bot_count: int = 1, questions_count: int = 3):
         super().__init__(
             game_id="review",
             title="1 Star Review",
             instruction="Review-bomb this mundane everyday item! Give a petty, hilarious 1-star review.",
             bot_engine=bot_engine,
-            bot_count=bot_count
+            bot_count=bot_count,
+            questions_count=questions_count
         )
-        self.chosen_product = None
 
-    def _select_prompt(self):
-        self.chosen_product = random.choice(REVIEW_PRODUCTS)
-        self.prompt_data = {
-            "type": "text",
-            "prompt_text": f"Product: {self.chosen_product['product']}",
-            "item_name": self.chosen_product['product'],
-            "placeholder": "Write your 1-star review here..."
-        }
+    def _select_prompts(self):
+        pool = list(REVIEW_PRODUCTS)
+        random.shuffle(pool)
+        chosen_list = [pool[i % len(pool)] for i in range(self.questions_count)]
+
+        self.questions = []
+        for i, chosen in enumerate(chosen_list):
+            self.questions.append({
+                "index": i,
+                "prompt_data": {
+                    "type": "text",
+                    "prompt_text": f"Product: {chosen['product']}",
+                    "item_name": chosen["product"],
+                    "placeholder": "Write your 1-star review here..."
+                },
+                "meta": chosen,
+                "submissions": {},
+                "votes": {},
+                "bot_ids": []
+            })
 
     def _generate_bots(self):
-        for i in range(self.bot_count):
-            bot_id = f"bot_{i+1}"
-            bot_name = self.bot_engine.get_bot_display_name()
-            self.bot_ids.append(bot_id)
-            
-            review = self.bot_engine.generate_review(
-                product_name=self.chosen_product["product"],
-                fallback_answers=self.chosen_product["fallbacks"]
-            )
-            
-            sub_id = f"sub_{bot_id}"
-            self.submissions[sub_id] = {
-                "id": sub_id,
-                "author_id": bot_id,
-                "author_name": bot_name,
-                "is_bot": True,
-                "response": review,
-                "is_locked": True,
-                "version": 0
-            }
+        for q in self.questions:
+            chosen = q["meta"]
+            for i in range(self.bot_count):
+                bot_id = f"bot_{i+1}"
+                bot_name = self.bot_engine.get_bot_display_name()
+                if bot_id not in q["bot_ids"]:
+                    q["bot_ids"].append(bot_id)
 
-    def _get_fallback_response(self) -> str:
-        if self.chosen_product and self.chosen_product.get("fallbacks"):
-            chosen = random.choice(self.chosen_product["fallbacks"])
-            return chosen[0].upper() + chosen[1:] if chosen else ""
+                review = self.bot_engine.generate_review(
+                    product_name=chosen["product"],
+                    fallback_answers=chosen["fallbacks"]
+                )
+
+                sub_id = f"sub_{bot_id}"
+                q["submissions"][sub_id] = {
+                    "id": sub_id,
+                    "author_id": bot_id,
+                    "author_name": bot_name,
+                    "is_bot": True,
+                    "response": review,
+                    "is_locked": True,
+                    "version": 0
+                }
+
+    def _get_fallback_response_for_question(self, q: Dict[str, Any]) -> str:
+        chosen = q.get("meta")
+        if chosen and chosen.get("fallbacks"):
+            chosen_ans = random.choice(chosen["fallbacks"])
+            return chosen_ans[0].upper() + chosen_ans[1:] if chosen_ans else ""
         return "Broke immediately, waste of money"

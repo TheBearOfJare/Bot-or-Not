@@ -39,7 +39,7 @@ MINIGAME_REGISTRY: Dict[str, Dict[str, any]] = {
     }
 }
 
-def create_minigame_instance(game_key: str, bot_engine, bot_count: int = 1):
+def create_minigame_instance(game_key: str, bot_engine, bot_count: int = 1, questions_count: int = 3):
     """
     Factory function to instantiate a minigame by key.
     """
@@ -48,4 +48,6 @@ def create_minigame_instance(game_key: str, bot_engine, bot_count: int = 1):
     
     game_meta = MINIGAME_REGISTRY[game_key]
     game_cls = game_meta["class"]
-    return game_cls(bot_engine=bot_engine, bot_count=bot_count)
+    if game_meta.get("is_bonus", False):
+        return game_cls(bot_engine=bot_engine, bot_count=bot_count)
+    return game_cls(bot_engine=bot_engine, bot_count=bot_count, questions_count=questions_count)

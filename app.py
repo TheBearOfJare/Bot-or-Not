@@ -81,6 +81,13 @@ def api_start():
     if custom_sequence and isinstance(custom_sequence, list):
         game_manager.set_game_sequence(custom_sequence)
         
+    custom_questions = data.get("questions_per_minigame")
+    if custom_questions is not None:
+        try:
+            game_manager.set_questions_per_minigame(int(custom_questions))
+        except (ValueError, TypeError):
+            pass
+
     started = game_manager.start_game()
     return jsonify({"success": started, "phase": game_manager.phase, "state": game_manager.get_host_state()})
 
@@ -93,6 +100,20 @@ def api_set_sequence():
         return jsonify({"success": True, "sequence": game_manager.game_sequence})
     return jsonify({"success": False, "error": "Invalid sequence format"}), 400
 
+@app.route("/api/set_settings", methods=["POST"])
+def api_set_settings():
+    data = request.get_json(silent=True) or {}
+    q_count = data.get("questions_per_minigame")
+    if q_count is not None:
+        try:
+            game_manager.set_questions_per_minigame(int(q_count))
+        except (ValueError, TypeError):
+            return jsonify({"success": False, "error": "Invalid questions count"}), 400
+    return jsonify({
+        "success": True,
+        "questions_per_minigame": game_manager.questions_per_minigame
+    })
+
 @app.route("/api/submit", methods=["POST"])
 def api_submit():
     data = request.get_json(silent=True) or {}
@@ -100,12 +121,13 @@ def api_submit():
     response_val = data.get("response")
     is_locked = bool(data.get("locked", True))
     version = data.get("version", 0)
+    question_index = data.get("question_index")
     
     if not player_id or response_val is None:
         return jsonify({"success": False, "error": "Missing player_id or response"}), 400
         
     ok = game_manager.handle_player_submission(
-        player_id, response_val, is_locked=is_locked, version=version
+        player_id, response_val, is_locked=is_locked, version=version, question_index=question_index
     )
     return jsonify({"success": ok})
 
@@ -114,11 +136,12 @@ def api_vote():
     data = request.get_json(silent=True) or {}
     player_id = data.get("player_id") or session.get("player_id")
     target_option_ids = data.get("target_option_ids") or data.get("target_option_id")
+    question_index = data.get("question_index")
     
     if not player_id or not target_option_ids:
         return jsonify({"success": False, "error": "Missing player_id or target_option_ids"}), 400
         
-    ok = game_manager.handle_player_vote(player_id, target_option_ids)
+    ok = game_manager.handle_player_vote(player_id, target_option_ids, question_index=question_index)
     return jsonify({"success": ok})
 
 @app.route("/api/bonus_guess", methods=["POST"])

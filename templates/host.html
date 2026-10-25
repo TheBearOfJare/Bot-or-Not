@@ -44,6 +44,21 @@
                 </div>
 
                 <div style="margin-top: 24px;">
+                    <h3>Questions Per Minigame</h3>
+                    <p class="subtitle" style="font-size: 0.95rem;">Configure how many prompts run per minigame:</p>
+                    <div class="settings-questions-group" id="settings-questions-buttons">
+                        <button type="button" class="btn-setting" onclick="setQuestionsCount(1)" id="btn-q-1">1</button>
+                        <button type="button" class="btn-setting" onclick="setQuestionsCount(2)" id="btn-q-2">2</button>
+                        <button type="button" class="btn-setting active" onclick="setQuestionsCount(3)" id="btn-q-3">3 (Default)</button>
+                        <button type="button" class="btn-setting" onclick="setQuestionsCount(4)" id="btn-q-4">4</button>
+                        <button type="button" class="btn-setting" onclick="setQuestionsCount(5)" id="btn-q-5">5</button>
+                    </div>
+                    <p style="font-size: 0.8rem; color: #9ca3af; margin-top: 6px;">
+                        Prompts are served one after the other, followed by voting on all sets, then ranking changes.
+                    </p>
+                </div>
+
+                <div style="margin-top: 24px;">
                     <button class="btn btn-success" id="btn-start-game" onclick="startGame()">
                         🚀 START GAME
                     </button>
@@ -57,7 +72,10 @@
 
     <!-- Phase 2: INSTRUCTIONS -->
     <section id="phase-instructions" class="card" style="display: none; text-align: center;">
-        <span class="tag tag-bot" id="instructions-round-tag">Round 1</span>
+        <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 8px;">
+            <span class="tag tag-bot" id="instructions-round-tag">Round 1</span>
+            <span class="tag tag-step" id="instructions-questions-tag">3 Prompts</span>
+        </div>
         <h2 id="instructions-game-title" style="font-size: 2.2rem; margin: 16px 0;">Minigame Title</h2>
         <div class="card" style="background: #0f172a; max-width: 700px; margin: 20px auto; padding: 28px;">
             <p id="instructions-text" style="font-size: 1.4rem; line-height: 1.6;"></p>
@@ -70,9 +88,10 @@
     <!-- Phase 3: SUBMITTING -->
     <section id="phase-submitting" class="card" style="display: none;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                 <span class="tag tag-bot" id="submitting-round-tag">Round</span>
-                <span id="submitting-game-title" style="font-weight: 700; color: #9ca3af; margin-left: 8px;"></span>
+                <span class="tag tag-step" id="submitting-question-tag">Prompt 1 of 3</span>
+                <span id="submitting-game-title" style="font-weight: 700; color: #9ca3af; margin-left: 4px;"></span>
             </div>
             <div class="timer-pill" id="host-submitting-timer-box">
                 ⏱️ <span id="submitting-timer">25</span>s
@@ -95,9 +114,10 @@
     <!-- Phase 4: VOTING -->
     <section id="phase-voting" class="card" style="display: none;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-            <div>
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                 <span class="tag tag-bot">VOTING PHASE</span>
-                <span id="voting-game-title" style="font-weight: 700; color: #9ca3af; margin-left: 8px;"></span>
+                <span class="tag tag-step" id="voting-question-tag">Voting Set 1 of 3</span>
+                <span id="voting-game-title" style="font-weight: 700; color: #9ca3af; margin-left: 4px;"></span>
             </div>
             <div class="timer-pill" id="host-voting-timer-box">
                 ⏱️ <span id="voting-timer">25</span>s
@@ -105,6 +125,8 @@
         </div>
         <h2 style="font-size: 1.8rem; text-align: center; margin-bottom: 6px;" id="voting-header-title">Which Response is the BOT?</h2>
         <p class="subtitle" style="text-align: center;" id="voting-header-subtitle">Vote on your phones now!</p>
+
+        <div class="prompt-banner" id="voting-prompt-reminder" style="font-size: 1.25rem; padding: 14px 20px; margin-bottom: 16px;"></div>
 
         <div class="options-grid" id="voting-options-grid"></div>
 
@@ -114,28 +136,40 @@
 
     <!-- Phase 5: REVEAL -->
     <section id="phase-reveal" class="card" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span class="tag tag-bot">THE REVEAL</span>
+                <span class="tag tag-step" id="reveal-question-tag">Question 1 of 3</span>
+            </div>
+            <div class="timer-pill" id="host-reveal-timer-box">
+                ⏱️ <span id="reveal-timer">10</span>s
+            </div>
+        </div>
         <h2 style="font-size: 2rem; text-align: center; margin-bottom: 6px;">The Reveal!</h2>
         <p class="subtitle" style="text-align: center;">Let's see which responses were generated by a BOT vs a HUMAN...</p>
+
+        <div class="prompt-banner" id="reveal-prompt-reminder" style="font-size: 1.25rem; padding: 14px 20px; margin-bottom: 16px;"></div>
 
         <div id="reveal-cards-container"></div>
 
         <div style="text-align: center; margin-top: 24px; color: var(--text-secondary);">
-            Advancing in <span id="reveal-timer" style="font-weight: 700; color: #60a5fa;">10</span>s...
+            Advancing in <span id="reveal-timer-bottom" style="font-weight: 700; color: #60a5fa;">10</span>s...
         </div>
     </section>
 
     <!-- Phase 6: SCOREBOARD -->
     <section id="phase-scoreboard" class="card" style="display: none;">
-        <h2 style="font-size: 2rem; text-align: center; margin-bottom: 8px;">🔒 Evaluation Standings (Classified)</h2>
-        <p class="subtitle" style="text-align: center; max-width: 650px; margin: 0 auto 20px;">
-            Scores are strictly encrypted by the Organization until the final evaluation to keep author identities completely secret!
+        <h2 style="font-size: 2rem; text-align: center; margin-bottom: 8px;">🔒 Evaluation Standings & Ranking Changes</h2>
+        <p class="subtitle" style="text-align: center; max-width: 680px; margin: 0 auto 20px;">
+            Rank movements are revealed on the main screen, while exact points remain encrypted until final evaluation! Check your phone for your private score.
         </p>
         <table class="scoreboard-table">
             <thead>
                 <tr>
-                    <th>Status</th>
-                    <th>Player</th>
-                    <th>Score</th>
+                    <th style="width: 15%;">Rank</th>
+                    <th style="width: 40%;">Player</th>
+                    <th style="width: 25%;">Movement</th>
+                    <th style="width: 20%;">Score</th>
                 </tr>
             </thead>
             <tbody id="scoreboard-body"></tbody>

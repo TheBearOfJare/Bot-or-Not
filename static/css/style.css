@@ -428,3 +428,104 @@ input[type="text"]:focus, textarea:focus, select:focus {
     box-shadow: 0 0 0 2px #60a5fa;
 }
 
+/* Question / Step Tag */
+.tag-step {
+    background: #2563eb;
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.tag-secret {
+    background: #4f46e5;
+    color: #e0e7ff;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* Settings Questions Selector in Lobby */
+.settings-questions-group {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.btn-setting {
+    background: #111827;
+    border: 2px solid var(--border);
+    color: #d1d5db;
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-setting:hover {
+    border-color: #3b82f6;
+    color: #ffffff;
+}
+
+.btn-setting.active {
+    background: #1e3a8a;
+    border-color: #60a5fa;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+}
+
+/* Rank Movement Badges */
+.badge-movement {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: 800;
+    font-size: 0.95rem;
+}
+
+.badge-movement-up {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border: 1px solid #10b981;
+}
+
+.badge-movement-down {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border: 1px solid #ef4444;
+}
+
+.badge-movement-none {
+    background: rgba(156, 163, 175, 0.15);
+    color: #9ca3af;
+    border: 1px solid #4b5563;
+}
+
+/* Player Secret Score Card */
+.player-secret-score-box {
+    background: linear-gradient(135deg, #1e1b4b, #1e293b);
+    border: 2px solid #6366f1;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin: 10px 0;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.25);
+}
+
+.player-score-highlight {
+    font-size: 2.2rem;
+    font-weight: 900;
+    color: #34d399;
+    letter-spacing: 1px;
+    margin-top: 4px;
+}
+
+.stat-box {
+    background: #111827;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+}
+
