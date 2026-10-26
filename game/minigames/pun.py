@@ -1,24 +1,41 @@
+import os
+import json
 import random
 from typing import Dict, Any, List
 from game.minigames.base import BaseMinigame
 
-# Simple prompt strings for easy expansion
-PUN_PROMPTS: List[str] = [
-    "Why don't skeletons fight each other? Because...",
-    "I told my suitcase there will be no vacation this year. Now...",
-    "Parallel lines have so much in common. It's a shame...",
-    "What do you call a fake noodle? An...",
-    "Why did the scarecrow win an award? Because he was...",
-    "I used to play piano by ear, but now I...",
-    "Why did the tomato blush? Because...",
-    "I'm reading a book on anti-gravity. It's impossible to...",
-    "Why can't you trust stairs? Because...",
-    "What do you call a sleeping dinosaur? A...",
-    "Why did the golfer bring two pairs of pants? In case...",
-    "I used to be a personal banker, but then I...",
-    "Why did the bicycle fall over? Because...",
-    "What do you call cheese that isn't yours? ...",
+PROMPTS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "prompts", "pun.json"))
+
+# Built-in fallbacks if data/prompts/pun.json is absent
+DEFAULT_PUN_PROMPTS: List[str] = [
+    "The secret reason Dracula stopped drinking blood is because...",
+    "I tried dating a time traveler, but our relationship...",
+    "The worst slogan for a cemetery would definitely be: '...'",
+    "The real reason the Titanic sank was actually...",
+    "A terrible name for a budget airline would be...",
+    "I tried to start a hot air balloon business, but it...",
+    "My psychic told me my future looks bright, mostly because...",
+    "The worst thing you could hear a surgeon say right before anesthesia kicks in is: '...'",
+    "I invented a waterproof toaster. The only problem is...",
+    "I quit my job at the helium factory because...",
+    "A fast food restaurant run entirely by ghosts would be called...",
+    "The real reason aliens refuse to visit Earth is...",
+    "I asked the librarian for books on paranoia, and they whispered...",
+    "My doctor told me I speak only in gardening metaphors. I told him...",
 ]
+
+def load_pun_prompts() -> List[str]:
+    try:
+        if os.path.exists(PROMPTS_FILE):
+            with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+    except Exception as e:
+        print(f"[CompleteThePunGame] Error loading {PROMPTS_FILE}: {e}")
+    return DEFAULT_PUN_PROMPTS
+
+PUN_PROMPTS = load_pun_prompts()
 
 # Shared generic emergency fallbacks if Ollama is offline or times out
 GENERIC_PUN_FALLBACKS = [
@@ -43,7 +60,7 @@ class CompleteThePunGame(BaseMinigame):
         )
 
     def _select_prompts(self):
-        pool = list(PUN_PROMPTS)
+        pool = list(load_pun_prompts())
         random.shuffle(pool)
         chosen_list = [pool[i % len(pool)] for i in range(self.questions_count)]
 

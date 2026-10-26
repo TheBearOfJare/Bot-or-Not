@@ -1,9 +1,13 @@
+import os
+import json
 import random
 from typing import Any, Dict, List, Optional
 from game.minigames.base import BaseMinigame
 
-# Simple question strings for easy expansion
-SURVEY_PROMPTS: List[str] = [
+PROMPTS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "prompts", "survey.json"))
+
+# Built-in fallbacks if data/prompts/survey.json is absent
+DEFAULT_SURVEY_PROMPTS: List[str] = [
     "Name something people pretend to understand just to look smart.",
     "Name an excuse for being an hour late to work that would NOT work.",
     "Name something you should never do in a crowded elevator.",
@@ -12,7 +16,24 @@ SURVEY_PROMPTS: List[str] = [
     "Name something people always forget when going on vacation.",
     "Name something people do when they think no one is watching.",
     "Name a food that is great hot but completely disgusting cold.",
+    "Name something you should never admit on a first date.",
+    "Name a terrible gift to receive from your boss.",
+    "Name something that feels like a crime, but is completely legal.",
+    "Name a sound you never want to hear coming from your car while driving.",
 ]
+
+def load_survey_prompts() -> List[str]:
+    try:
+        if os.path.exists(PROMPTS_FILE):
+            with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+    except Exception as e:
+        print(f"[SurveySaysGame] Error loading {PROMPTS_FILE}: {e}")
+    return DEFAULT_SURVEY_PROMPTS
+
+SURVEY_PROMPTS = load_survey_prompts()
 
 # Shared generic emergency 3-answer sets if Ollama is offline or times out
 GENERIC_SURVEY_FALLBACKS = [
@@ -36,7 +57,7 @@ class SurveySaysGame(BaseMinigame):
         )
 
     def _select_prompts(self):
-        pool = list(SURVEY_PROMPTS)
+        pool = list(load_survey_prompts())
         random.shuffle(pool)
         chosen_list = [pool[i % len(pool)] for i in range(self.questions_count)]
 

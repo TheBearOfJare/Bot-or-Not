@@ -1,22 +1,40 @@
+import os
+import json
 import random
 from typing import Dict, Any, List
 from game.minigames.base import BaseMinigame
 
-# Simple product strings for easy expansion
-REVIEW_PRODUCTS: List[str] = [
-    "A standard yellow No. 2 pencil",
-    "A bottle of municipal tap water",
-    "A 12-inch clear plastic ruler",
-    "A brown cardboard box",
-    "A pack of unscented paper napkins",
-    "A pair of generic white athletic socks",
-    "An ordinary metal paperclip",
-    "A standard wooden toothpick",
-    "A basic USB wall charger",
-    "A roll of aluminum foil",
-    "A bag of plain ice cubes",
-    "A retractable blue ballpoint pen",
+PROMPTS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "prompts", "review.json"))
+
+# Built-in fallbacks if data/prompts/review.json is absent
+DEFAULT_REVIEW_PRODUCTS: List[str] = [
+    "A high-end bathroom scale with Bluetooth sync to your phone",
+    "A scented candle labeled 'Ocean Breeze'",
+    "A mood ring from a museum gift shop",
+    "A self-help book titled 'How to Be Decisive'",
+    "A 1000-piece jigsaw puzzle of a clear blue sky",
+    "A high-magnification illuminated makeup mirror",
+    "An ultra-precision digital alarm clock with sunrise simulator",
+    "A pair of noise-canceling headphones",
+    "A 'smart' electric toothbrush with a mobile tracking app",
+    "A memory foam ergonomic contour pillow",
+    "A motion-sensor automatic kitchen trash can",
+    "A robotic vacuum cleaner with pet detection",
+    "A 12-inch clear plastic school ruler",
 ]
+
+def load_review_products() -> List[str]:
+    try:
+        if os.path.exists(PROMPTS_FILE):
+            with open(PROMPTS_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    return data
+    except Exception as e:
+        print(f"[OneStarReviewGame] Error loading {PROMPTS_FILE}: {e}")
+    return DEFAULT_REVIEW_PRODUCTS
+
+REVIEW_PRODUCTS = load_review_products()
 
 # Shared generic emergency 1-star complaints if Ollama is offline or times out
 GENERIC_REVIEW_FALLBACKS = [
@@ -41,7 +59,7 @@ class OneStarReviewGame(BaseMinigame):
         )
 
     def _select_prompts(self):
-        pool = list(REVIEW_PRODUCTS)
+        pool = list(load_review_products())
         random.shuffle(pool)
         chosen_list = [pool[i % len(pool)] for i in range(self.questions_count)]
 
