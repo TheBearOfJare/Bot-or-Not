@@ -1,0 +1,12 @@
+{
+  version: 2,
+  mediaFileName: 'Bot or not BGM Full.mp3',
+  cutSegments: [
+    {
+      start: 3.69,
+      end: 18.46,
+      name: '',
+      selected: true,
+    },
+  ],
+}
