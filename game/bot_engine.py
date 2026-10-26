@@ -205,7 +205,14 @@ class BotEngine:
         if fallback_answers:
             chosen = random.choice(fallback_answers)
             return chosen[0].upper() + chosen[1:] if chosen else ""
-        return "They don't have the guts"
+        return random.choice([
+            "I have no idea honestly",
+            "Nobody knows",
+            "Too cheesy to say out loud",
+            "They just gave up",
+            "It seemed like a good idea at the time",
+            "Ask again later"
+        ])
 
     def generate_review(self, product_name: str, fallback_answers: list = None) -> str:
         prompt = (
@@ -223,7 +230,14 @@ class BotEngine:
         if fallback_answers:
             chosen = random.choice(fallback_answers)
             return chosen[0].upper() + chosen[1:] if chosen else ""
-        return "Broke immediately, waste of money"
+        return random.choice([
+            "Broke after five minutes of use",
+            "Terrible quality, completely useless",
+            "Do not recommend, huge waste of money",
+            "Arrived damaged and smelled weird",
+            "0 stars if I could. Awful",
+            "Worst purchase I have ever made"
+        ])
 
     def generate_survey_answers(self, survey_prompt: str, fallback_answers: list = None) -> list:
         prompt = (
@@ -245,7 +259,13 @@ class BotEngine:
         if fallback_answers and len(fallback_answers) >= 3:
             chosen = random.sample(fallback_answers, 3)
             return [x[0].upper() + x[1:] if x else "" for x in chosen]
-        return ["Traffic", "Overslept", "Car trouble"]
+        return list(random.choice([
+            ["Traffic", "Overslept", "Car trouble"],
+            ["My phone", "Procrastination", "Snacks"],
+            ["Awkward silence", "Forgetting names", "Spilling coffee"],
+            ["House keys", "Wallet", "Phone charger"],
+            ["Slow Wi-Fi", "Loud chewing", "Long lines"]
+        ]))
 
     def generate_dynamic_captcha_prompt(self) -> dict:
         """
@@ -310,8 +330,8 @@ class BotEngine:
         """
         prompt = (
             "Look at the attached image. You are playing a rapid party game on your phone with 20 seconds on the clock.\n"
-            "Quickly name what you see in 3 to 8 words (e.g. 'cat on top of a red car' or 'dog next to a fire hydrant').\n"
-            "Keep it casual, direct, and simple. Do NOT try to make jokes, do not write a paragraph, do not say it is blurry."
+            "Quickly name what you see in 3 to 8 words (e.g. 'cat riding on top of a red car', 'cyberpunk landscape at night', or 'man holding a giant pizza').\n"
+            "Keep it casual, direct, and simple. If you're unsure, give it an artistic name eg. 'parking lot sunset'. Do not write a paragraph, do not say it is blurry."
         )
         sys_prompt = "You type quick, direct 3-8 word descriptions of what you see in photos for a party game."
         ans = self.query_ollama(prompt, sys_prompt, image_path=image_path, num_predict=35)
@@ -322,4 +342,11 @@ class BotEngine:
         if fallback_answers:
             chosen = random.choice(fallback_answers)
             return chosen[0].upper() + chosen[1:] if chosen else ""
-        return "Looks like a cat on a car"
+        return random.choice([
+            "Looks like a street scene",
+            "Car parked near a building",
+            "A blurry outdoor photo",
+            "Someone standing on a sidewalk",
+            "Looks like a cat on a car"
+        ])
+

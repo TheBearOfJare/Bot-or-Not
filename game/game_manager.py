@@ -1,3 +1,4 @@
+import os
 import uuid
 import time
 import threading
@@ -114,9 +115,9 @@ class GameManager:
             self.last_round_rankings.clear()
             self.player_round_scores.clear()
             self._load_current_game()
-            self.phase = "INSTRUCTIONS"
+            self.phase = "INTRO"
             self.phase_start_time = time.time()
-            print(f"[GameManager] Match started successfully! Round {self.round_number}: {self.current_game.title}")
+            print(f"[GameManager] Match started successfully! Phase: INTRO (GlorpCorp Orientation)")
             return True
 
     def _load_current_game(self):
@@ -137,6 +138,28 @@ class GameManager:
         else:
             self.current_game.start_round(self.players)
 
+    def get_intro_text(self) -> str:
+        """Reads intro orientation instructions from voicelines.txt."""
+        voicelines_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "voicelines.txt")
+        if os.path.exists(voicelines_path):
+            try:
+                with open(voicelines_path, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content:
+                        return content
+            except Exception as e:
+                print(f"[GameManager] Error reading voicelines.txt: {e}")
+        return (
+            "Welcome, test subjects. The future of propaganda and misinformation is finally here at GlorpCorp.ru. "
+            "Our bots are purpose built to help you curb criticism, defame your competitors, or win your next election. "
+            "But before they can go influencing public opinion, they need to pass as human first, and there's still a few kinks to work out. "
+            "Today's exercises are pretty simple. In each round you'll be given a series of prompts for a simple task. "
+            "You have a short amount of time to answer each one, so try to think fast! "
+            "Once everyone's finished, you'll get to see everyone's responses, but be careful, because at least one of them was written by our bots. "
+            "Your job is to sort out which one's which. Guess which one's the bot, and you'll gain points. "
+            "If anyone thinks your response was AI generated, you'll lose points. Got it? Let's begin."
+        )
+
     def next_phase(self, expected_phase: Optional[str] = None) -> bool:
         """
         Advances game state machine to the next natural phase or sub-step.
@@ -152,6 +175,11 @@ class GameManager:
 
             if self.phase == "LOBBY":
                 return self.start_game()
+
+            elif self.phase == "INTRO":
+                self.phase = "INSTRUCTIONS"
+                self.phase_start_time = now
+                print(f"[GameManager] Intro complete. Advancing to Round {self.round_number}: {self.current_game.title if self.current_game else ''}")
 
             elif self.phase == "INSTRUCTIONS":
                 if self.current_game and getattr(self.current_game, "game_id", None) == "bonus":
@@ -518,6 +546,11 @@ class GameManager:
                 "instruction": self.current_game.instruction,
                 "prompt_data": active_prompt_data
             }
+            base_state["image_url"] = active_prompt_data.get("image_url", "")
+
+        if self.phase == "INTRO":
+            base_state["intro_text"] = self.get_intro_text()
+            base_state["intro_timeout"] = getattr(self.config, "INTRO_TIMEOUT", 32)
 
         # Submissions status
         if self.phase == "SUBMITTING" and self.current_game:
@@ -596,6 +629,7 @@ class GameManager:
 
         state = {
             "phase": self.phase,
+            "game_id": self.current_game.game_id if self.current_game else "",
             "player": {
                 "id": player["id"],
                 "name": player["name"],
@@ -620,6 +654,9 @@ class GameManager:
 
         if self.phase == "LOBBY":
             state["status_message"] = "You're in! Waiting for host to start the game..."
+
+        elif self.phase == "INTRO":
+            state["status_message"] = "Orientation briefing in progress on Host screen! Stand by for Round 1..."
 
         elif self.phase == "INSTRUCTIONS":
             state["title"] = self.current_game.title if self.current_game else ""
@@ -650,12 +687,16 @@ class GameManager:
             q = self.current_game.questions[curr_vote_idx] if hasattr(self.current_game, "questions") and curr_vote_idx < len(self.current_game.questions) else {}
             has_voted = player_id in q.get("votes", {}) if q else player_id in self.current_game.votes
 
+            prompt_data = q.get("prompt_data", {}) if q else getattr(self.current_game, "prompt_data", {})
+
             state["has_voted"] = has_voted
             state["question_index"] = curr_vote_idx
             state["question_number"] = curr_vote_idx + 1
             state["total_questions"] = total_q
             state["options"] = self.current_game.get_voting_options(voter_id=player_id, question_index=curr_vote_idx)
-            state["prompt_text"] = q.get("prompt_data", {}).get("prompt_text", "") if q else self.current_game.prompt_data.get("prompt_text", "")
+            state["prompt_text"] = prompt_data.get("prompt_text", "")
+            state["prompt_data"] = prompt_data
+            state["image_url"] = prompt_data.get("image_url", "")
 
             if has_voted:
                 if curr_vote_idx + 1 < total_q:

@@ -34,6 +34,7 @@ class Config:
     SUBMISSION_TIMEOUT = 30           # Limited time to answer in each minigame (bumped to 30s)
     SUBMISSION_TIMEOUT_SURVEY = 40    # Extended time for Survey Says (3 answers)
     VOTING_TIMEOUT = 25               # Limited time to vote
+    INTRO_TIMEOUT = 32                # Game orientation / voicelines briefing display time
     INSTRUCTIONS_TIMEOUT = 8          # Instructions display time
     REVEAL_TIMEOUT = 10               # Reveal phase display time
     SCOREBOARD_TIMEOUT = 8            # Scoreboard intermission time

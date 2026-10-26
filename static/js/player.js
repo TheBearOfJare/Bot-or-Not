@@ -207,6 +207,19 @@ function renderPlayerView(state) {
             showScreen("screen-lobby");
             break;
 
+        case "INTRO":
+            clearInterval(playerCountdown);
+            showScreen("screen-instructions");
+            const introTitle = document.getElementById("player-inst-title");
+            if (introTitle) introTitle.innerText = "GLORPCORP ORIENTATION";
+            const introInstEl = document.getElementById("player-inst-text");
+            const introMsg = "Mandatory Turing Protocol briefing in progress on Host display. Direct attention to the main screen before Round 1 begins...";
+            if (introInstEl && (isPhaseOrRoundChanged || introInstEl.getAttribute("data-typed-text") !== introMsg)) {
+                introInstEl.setAttribute("data-typed-text", introMsg);
+                typeTerminalText(introInstEl, introMsg, { speed: 15, cursor: true });
+            }
+            break;
+
         case "INSTRUCTIONS":
             clearInterval(playerCountdown);
             showScreen("screen-instructions");
@@ -590,6 +603,22 @@ function renderVotingScreen(state, isVoteChanged) {
         }
     }
 
+    // Check if CAPTCHA challenge image is present for voting
+    const captchaBox = document.getElementById("player-voting-captcha-preview");
+    const captchaImg = document.getElementById("player-voting-captcha-img");
+    const imageUrl = state.image_url || (state.prompt_data && state.prompt_data.image_url);
+    if (captchaBox && captchaImg) {
+        if (imageUrl) {
+            captchaBox.style.display = "block";
+            if (!captchaImg.src.includes(imageUrl)) {
+                captchaImg.src = imageUrl;
+            }
+        } else {
+            captchaBox.style.display = "none";
+            captchaImg.src = "";
+        }
+    }
+
     if (state.has_voted) {
         clearInterval(playerCountdown);
         choicesBox.style.display = "none";
@@ -601,6 +630,20 @@ function renderVotingScreen(state, isVoteChanged) {
                 doneDesc.innerText = `Vote for Set ${currVoteNum} of ${totalQ} locked in! Next voting set coming up...`;
             } else {
                 doneDesc.innerText = "All votes locked in! Watch the TV screen for the reveal!";
+            }
+        }
+
+        const doneCaptchaBox = document.getElementById("player-voting-done-captcha");
+        const doneCaptchaImg = document.getElementById("player-voting-done-captcha-img");
+        if (doneCaptchaBox && doneCaptchaImg) {
+            if (imageUrl) {
+                doneCaptchaBox.style.display = "block";
+                if (!doneCaptchaImg.src.includes(imageUrl)) {
+                    doneCaptchaImg.src = imageUrl;
+                }
+            } else {
+                doneCaptchaBox.style.display = "none";
+                doneCaptchaImg.src = "";
             }
         }
         return;

@@ -2,111 +2,26 @@ import random
 from typing import Any, Dict, List, Optional
 from game.minigames.base import BaseMinigame
 
-SURVEY_PROMPTS = [
-    {
-        "question": "Name something people pretend to understand just to look smart.",
-        "fallbacks": [
-            "Wine tasting",
-            "Modern art",
-            "Crypto",
-            "Quantum physics",
-            "Stock market",
-            "Philosophy",
-            "Classical music",
-            "Taxes"
-        ]
-    },
-    {
-        "question": "Name a terrible excuse for being an hour late to work.",
-        "fallbacks": [
-            "Traffic",
-            "Overslept",
-            "Alarm didn't go off",
-            "Flat tire",
-            "Forgot my keys",
-            "Car wouldn't start",
-            "Spilled coffee",
-            "Lost track of time"
-        ]
-    },
-    {
-        "question": "Name something you should never do in a crowded elevator.",
-        "fallbacks": [
-            "Fart",
-            "Stare into someone's eyes",
-            "Eat smelly food",
-            "Talk loudly on phone",
-            "Press all the buttons",
-            "Cough without covering",
-            "Stand way too close",
-            "Sing loudly"
-        ]
-    },
-    {
-        "question": "Name a useless superpower that would actually be very annoying.",
-        "fallbacks": [
-            "Reading your own mind",
-            "Attracting pigeons",
-            "Tasting colors",
-            "Invisibility only when alone",
-            "Sweating juice",
-            "Floating one inch",
-            "Super smelling",
-            "Glowing in broad daylight"
-        ]
-    },
-    {
-        "question": "Name something you find at the bottom of a backpack or purse.",
-        "fallbacks": [
-            "Crumpled old receipts",
-            "Crushed snack crumbs",
-            "Sticky unwrapped mint",
-            "Loose spare change",
-            "Dead pen with no cap",
-            "Mystery hair tie",
-            "Empty gum wrapper",
-            "Broken headphone adapter"
-        ]
-    },
-    {
-        "question": "Name something people always forget when leaving the house.",
-        "fallbacks": [
-            "House keys",
-            "Phone charger cable",
-            "Sunglasses",
-            "Water bottle",
-            "Umbrella",
-            "Lip balm",
-            "Wallet",
-            "Turning off the stove"
-        ]
-    },
-    {
-        "question": "Name something people do when they think no one is watching.",
-        "fallbacks": [
-            "Pick their nose",
-            "Practice weird facial expressions in mirror",
-            "Talk out loud to themselves",
-            "Awkwardly smell their own shirt",
-            "Dance aggressively with no music",
-            "Check their hair in phone camera",
-            "Pretend they are in an action movie",
-            "Eat food straight out of fridge"
-        ]
-    },
-    {
-        "question": "Name a food that is great hot but completely disgusting cold.",
-        "fallbacks": [
-            "Soggy french fries",
-            "Greasy hamburger",
-            "Melted cheese dip",
-            "Bowl of tomato soup",
-            "Runny scrambled eggs",
-            "Warm milk",
-            "Cooked oatmeal",
-            "Microwave popcorn"
-        ]
-    }
+# Simple question strings for easy expansion
+SURVEY_PROMPTS: List[str] = [
+    "Name something people pretend to understand just to look smart.",
+    "Name an excuse for being an hour late to work that would NOT work.",
+    "Name something you should never do in a crowded elevator.",
+    "Name a superpower that would also be very annoying.",
+    "Name something you find at the bottom of a backpack or purse.",
+    "Name something people always forget when going on vacation.",
+    "Name something people do when they think no one is watching.",
+    "Name a food that is great hot but completely disgusting cold.",
+]
+
+# Shared generic emergency 3-answer sets if Ollama is offline or times out
+GENERIC_SURVEY_FALLBACKS = [
+    ["Traffic", "Overslept", "Car trouble"],
+    ["My phone", "Procrastination", "Snacks"],
+    ["Awkward silence", "Forgetting names", "Spilling coffee"],
+    ["House keys", "Wallet", "Phone charger"],
+    ["Slow Wi-Fi", "Loud chewing", "Long lines"],
+    ["Cold weather", "Alarm clock", "Monday mornings"]
 ]
 
 class SurveySaysGame(BaseMinigame):
@@ -126,16 +41,26 @@ class SurveySaysGame(BaseMinigame):
         chosen_list = [pool[i % len(pool)] for i in range(self.questions_count)]
 
         self.questions = []
-        for i, chosen in enumerate(chosen_list):
+        for i, item in enumerate(chosen_list):
+            if isinstance(item, str):
+                question = item
+                fallbacks = None
+            else:
+                question = item.get("question", "")
+                fallbacks = item.get("fallbacks")
+
             self.questions.append({
                 "index": i,
                 "prompt_data": {
                     "type": "multi_field",
-                    "prompt_text": chosen["question"],
+                    "prompt_text": question,
                     "field_count": 3,
                     "placeholders": ["Top Answer #1", "Top Answer #2", "Top Answer #3"]
                 },
-                "meta": chosen,
+                "meta": {
+                    "question": question,
+                    "fallbacks": fallbacks
+                },
                 "submissions": {},
                 "votes": {},
                 "bot_ids": []
@@ -143,7 +68,7 @@ class SurveySaysGame(BaseMinigame):
 
     def _generate_bots(self):
         for q in self.questions:
-            chosen = q["meta"]
+            meta = q["meta"]
             for i in range(self.bot_count):
                 bot_id = f"bot_{i+1}"
                 bot_name = self.bot_engine.get_bot_display_name()
@@ -151,8 +76,8 @@ class SurveySaysGame(BaseMinigame):
                     q["bot_ids"].append(bot_id)
 
                 answers = self.bot_engine.generate_survey_answers(
-                    survey_prompt=chosen["question"],
-                    fallback_answers=chosen["fallbacks"]
+                    survey_prompt=meta["question"],
+                    fallback_answers=meta.get("fallbacks")
                 )
 
                 sub_id = f"sub_{bot_id}"
@@ -167,14 +92,15 @@ class SurveySaysGame(BaseMinigame):
                 }
 
     def _get_fallback_response_for_question(self, q: Dict[str, Any]) -> list:
-        chosen = q.get("meta")
-        if chosen and chosen.get("fallbacks"):
-            fallbacks = chosen["fallbacks"]
-            return random.sample(fallbacks, min(3, len(fallbacks)))
-        return ["Traffic", "Overslept", "Car trouble"]
+        meta = q.get("meta", {})
+        fallbacks = meta.get("fallbacks") if isinstance(meta, dict) else None
+        if fallbacks and len(fallbacks) >= 3:
+            return random.sample(fallbacks, 3)
+        return list(random.choice(GENERIC_SURVEY_FALLBACKS))
 
     def _get_fallback_response(self) -> list:
-        return ["Traffic", "Overslept", "Car trouble"]
+        return list(random.choice(GENERIC_SURVEY_FALLBACKS))
+
 
     def submit_player_response(self, player_id: str, player_name: str, response_data: Any, is_locked: bool = True, version: int = 0, question_index: Optional[int] = None) -> bool:
         with self._lock:

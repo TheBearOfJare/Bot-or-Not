@@ -3,6 +3,32 @@
 {% block title %}Bot or Not - Host Screen{% endblock %}
 
 {% block content %}
+<!-- Phase 0: TITLE SCREEN (INITIAL BOOT GATE) -->
+<div id="host-title-screen" class="title-screen-overlay">
+    <div class="title-screen-card card">
+        <div class="terminal-sys-badge" style="font-size: 0.88rem; margin-bottom: 12px;">
+            <span class="term-status-dot"></span>SYS_BOOT // GLORPCORP_TURING_v2.6 [READY]
+        </div>
+        <h1 class="title-main-logo">&gt; <span class="hl-cyan">BOT</span> OR <span class="hl-red">NOT</span><span class="terminal-cursor">&nbsp;</span></h1>
+        <p class="subtitle" style="font-size: 1.15rem; margin-top: 6px;">// Party Deduction Game &amp; AI Turing Challenge</p>
+        
+        <div class="title-status-box">
+            <div class="title-status-line"><span class="hl-green">✓</span> ACCESS_POINT: <span class="hl-cyan">http://{{ local_ip }}:{{ port }}</span></div>
+            <div class="title-status-line"><span class="hl-green">✓</span> PLAYER_CONTROLLERS: <span class="hl-cyan">http://{{ local_ip }}:{{ port }}/player</span></div>
+            <div class="title-status-line"><span class="hl-amber">⚡</span> AUDIO_SUBSYSTEM: <span>STANDBY // AWAITING OPERATOR LAUNCH</span></div>
+        </div>
+
+        <div style="margin-top: 24px;">
+            <button class="btn btn-primary btn-title-start" id="btn-title-start" onclick="launchHostSystem()">
+                [ &gt; INITIALIZE SYSTEM &amp; CREATE LOBBY &lt; ]
+            </button>
+            <p class="title-hint">
+                // Click above or press [SPACE] / [ENTER] to engage host terminal &amp; sound streams
+            </p>
+        </div>
+    </div>
+</div>
+
 <div class="container host-container">
     <header class="host-header">
         <div class="terminal-meta-brand">
@@ -72,6 +98,21 @@
         </div>
     </section>
 
+    <!-- Phase 1.5: INTRO (GLORPCORP ORIENTATION) -->
+    <section id="phase-intro" class="card" style="display: none; text-align: center;">
+        <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 8px;">
+            <span class="tag tag-bot">[ GLORPCORP.RU ORIENTATION ]</span>
+            <span class="tag tag-step">[ TURING PROTOCOL BRIEFING ]</span>
+        </div>
+        <h2 id="intro-title" style="font-size: 2.2rem; margin: 12px 0; letter-spacing: 0.05em;">&gt; WELCOME, TEST SUBJECTS</h2>
+        <div class="card" style="background: #080a10; border: 1px solid var(--accent); max-width: 960px; margin: 14px auto; padding: 24px 28px; box-shadow: 0 0 30px rgba(0, 240, 255, 0.15);">
+            <p id="intro-text" style="font-size: 1.25rem; line-height: 1.7; text-align: left; color: #e2e8f0; white-space: pre-wrap; font-family: var(--font);"></p>
+        </div>
+        <div style="margin-top: 18px; color: var(--text-secondary); font-size: 1.15rem; letter-spacing: 0.05em;">
+            INITIALIZING ROUND 1 IN <span id="intro-timer" style="font-weight: 700; color: var(--accent);">32</span>s...
+        </div>
+    </section>
+
     <!-- Phase 2: INSTRUCTIONS -->
     <section id="phase-instructions" class="card" style="display: none; text-align: center;">
         <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 8px;">
@@ -130,6 +171,13 @@
 
         <div class="prompt-banner" id="voting-prompt-reminder" style="font-size: 1.25rem; padding: 14px 20px; margin-bottom: 16px;"></div>
 
+        <div id="voting-captcha-box" class="captcha-image-display" style="display: none; margin: 16px auto; text-align: center;">
+            <div style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-secondary); margin-bottom: 8px;">
+                // Reference CAPTCHA Target
+            </div>
+            <img id="voting-captcha-img" src="" alt="CAPTCHA Challenge">
+        </div>
+
         <div class="options-grid" id="voting-options-grid"></div>
 
         <h3 style="margin-top: 20px;">// Live Voting Status Feed</h3>
@@ -151,6 +199,13 @@
         <p class="subtitle" style="text-align: center; margin-bottom: 14px;">// Isolating synthetic AI bot generation vs human biological submissions...</p>
 
         <div class="prompt-banner" id="reveal-prompt-reminder" style="font-size: 1.25rem; padding: 14px 20px; margin-bottom: 16px;"></div>
+
+        <div id="reveal-captcha-box" class="captcha-image-display" style="display: none; margin: 16px auto; text-align: center;">
+            <div style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-secondary); margin-bottom: 8px;">
+                // Evaluated CAPTCHA Target
+            </div>
+            <img id="reveal-captcha-img" src="" alt="CAPTCHA Challenge">
+        </div>
 
         <div id="reveal-cards-container"></div>
 
@@ -233,6 +288,11 @@
     <span id="auto-pilot-indicator" style="align-self: center; font-size: 0.82rem; color: var(--terminal-green); margin-right: auto; letter-spacing: 0.08em;">
         [● AUTO-PILOT ENGAGED]
     </span>
+    <div id="host-audio-controls" style="display: flex; align-items: center; gap: 8px; margin-right: 12px;">
+        <button class="btn btn-secondary btn-sm" id="btn-audio-toggle" onclick="toggleBgmAudio()" title="Cycle BGM volume / mute">
+            <span id="bgm-icon">🔊</span> <span id="bgm-label">BGM: 70%</span>
+        </button>
+    </div>
     <button class="btn btn-secondary btn-sm" onclick="advancePhase()" id="btn-skip-phase">
         [ ⏩ SKIP TIMER ]
     </button>
@@ -243,5 +303,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="/static/js/bgm.js?v={{ v }}"></script>
 <script src="/static/js/host.js?v={{ v }}"></script>
 {% endblock %}

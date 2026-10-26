@@ -86,9 +86,14 @@ async function pollHostState() {
 
 function renderHostView(state) {
     const phases = [
-        "lobby", "instructions", "submitting", "voting", 
+        "lobby", "intro", "instructions", "submitting", "voting", 
         "reveal", "scoreboard", "bonus", "bonus-reveal", "game-over"
     ];
+
+    // Synchronize host background music with current phase
+    if (window.bgmManager && typeof window.bgmManager.onPhaseChange === "function") {
+        window.bgmManager.onPhaseChange(state.phase);
+    }
 
     const currentPhaseKey = state.phase.toLowerCase().replace("_", "-");
 
@@ -124,6 +129,9 @@ function renderHostView(state) {
     switch (state.phase) {
         case "LOBBY":
             renderLobby(state);
+            break;
+        case "INTRO":
+            renderIntro(state, isPhaseChanged);
             break;
         case "INSTRUCTIONS":
             renderInstructions(state, isPhaseChanged);
@@ -285,6 +293,22 @@ async function startGame() {
     }
 }
 
+// --- Phase 1.5: Intro (GlorpCorp Orientation Briefing) ---
+function renderIntro(state, isNewPhase) {
+    const instEl = document.getElementById("intro-text");
+    const introText = state.intro_text || "";
+    if (instEl && (isNewPhase || instEl.getAttribute("data-typed-text") !== introText)) {
+        instEl.setAttribute("data-typed-text", introText);
+        // Slower deliberate typewriter pace for orientation briefing
+        typeTerminalText(instEl, introText, { speed: 32, cursor: true });
+    }
+
+    if (isNewPhase) {
+        const timeout = state.intro_timeout || 32;
+        startCountdown(timeout, "intro-timer", advancePhase);
+    }
+}
+
 // --- Phase 2: Instructions ---
 function renderInstructions(state, isNewPhase) {
     const qInfo = state.question_info || {};
@@ -376,6 +400,22 @@ function renderVoting(state, isNewVote) {
                 typeTerminalText(reminderEl, pText, { speed: 14, cursor: true });
             }
         }
+
+        // Check if image captcha
+        const captchaBox = document.getElementById("voting-captcha-box");
+        const captchaImg = document.getElementById("voting-captcha-img");
+        if (captchaBox && captchaImg) {
+            const imgUrl = promptData.image_url || state.image_url;
+            if ((promptData.type === "image_caption" || state.game_info.id === "captcha") && imgUrl) {
+                captchaBox.style.display = "block";
+                if (!captchaImg.src.includes(imgUrl)) {
+                    captchaImg.src = imgUrl;
+                }
+            } else {
+                captchaBox.style.display = "none";
+                captchaImg.src = "";
+            }
+        }
     }
 
     const qTag = document.getElementById("voting-question-tag");
@@ -436,13 +476,25 @@ let stampAudioCtx = null;
 function clearRevealSequence() {
     revealTimeouts.forEach(t => clearTimeout(t));
     revealTimeouts = [];
+    const promptReminder = document.getElementById("reveal-prompt-reminder");
+    if (promptReminder) {
+        if (promptReminder._termTimer) {
+            clearTimeout(promptReminder._termTimer);
+            promptReminder._termTimer = null;
+        }
+        promptReminder.removeAttribute("data-typed-text");
+    }
 }
 
 function playStampSound() {
     try {
         if (!stampAudioCtx) {
-            const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (AudioCtx) stampAudioCtx = new AudioCtx();
+            if (window.bgmManager && typeof window.bgmManager.getAudioContext === "function" && window.bgmManager.getAudioContext()) {
+                stampAudioCtx = window.bgmManager.getAudioContext();
+            } else {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) stampAudioCtx = new AudioCtx();
+            }
         }
         if (stampAudioCtx && stampAudioCtx.state === "suspended") {
             stampAudioCtx.resume();
@@ -527,9 +579,20 @@ function renderReveal(state, isNewReveal) {
     const pText = revealData.active_prompt_data?.prompt_text || "";
     if (promptReminder) {
         promptReminder.style.display = pText ? "block" : "none";
-        if (pText && (isNewReveal || promptReminder.getAttribute("data-typed-text") !== pText)) {
-            promptReminder.setAttribute("data-typed-text", pText);
-            typeTerminalText(promptReminder, `>> EVALUATING: ${pText}`, { speed: 14, cursor: true });
+    }
+
+    const captchaBox = document.getElementById("reveal-captcha-box");
+    const captchaImg = document.getElementById("reveal-captcha-img");
+    if (captchaBox && captchaImg) {
+        const imgUrl = revealData.active_prompt_data?.image_url;
+        if (revealData.active_prompt_data?.type === "image_caption" && imgUrl) {
+            captchaBox.style.display = "block";
+            if (!captchaImg.src.includes(imgUrl)) {
+                captchaImg.src = imgUrl;
+            }
+        } else {
+            captchaBox.style.display = "none";
+            captchaImg.src = "";
         }
     }
 
@@ -553,32 +616,62 @@ function renderReveal(state, isNewReveal) {
             return;
         }
 
-        // Calculate card timings:
-        // Each card: 250ms entrance + (vote_count * 280ms per stamp) + (vote_count === 0 ? 600ms : 850ms pause)
+        // Calculate card timings with generous, dramatic pacing:
+        // For 0-vote cards: 800ms read text -> zero votes badge & details appear -> 2200ms active read -> 500ms transition = 3500ms
+        // For cards with votes: 800ms read text -> (votes * 450ms stamps) -> 150ms details fade-in -> 2200ms active read -> 500ms transition = 3650 + (votes * 450) ms
         const cardDurations = sortedCards.map(c => {
             const votes = c.vote_count || 0;
-            return votes === 0 ? 850 : 250 + (votes * 280) + 850;
+            return votes === 0 ? 3500 : 3650 + (votes * 450);
         });
 
         const totalAnimMs = cardDurations.reduce((sum, d) => sum + d, 0);
-        // Leave ~5-6s after all cards are revealed for players to read the complete board
-        const totalDurationSec = Math.max(10, Math.ceil((totalAnimMs + 5500) / 1000));
+
+        // Calculate prompt typing and 1-second pause duration
+        const fullPrompt = pText ? `>> EVALUATING: ${pText}` : "";
+        const promptTypingEstMs = fullPrompt ? (fullPrompt.length * 16) : 0;
+        const postPromptWaitMs = fullPrompt ? 1000 : 500;
+        const initialDelayMs = promptTypingEstMs + postPromptWaitMs;
+
+        // Leave ~6.5s after all cards are revealed for players to read the complete board
+        const totalDurationSec = Math.max(12, Math.ceil((initialDelayMs + totalAnimMs + 6500) / 1000));
 
         startCountdown(totalDurationSec, "reveal-timer", advancePhase);
         const bottomTimer = document.getElementById("reveal-timer-bottom");
         if (bottomTimer) bottomTimer.innerText = totalDurationSec;
 
-        let cumulativeTime = 0;
-        sortedCards.forEach((card, cardIndex) => {
-            const cardStartTime = cumulativeTime;
-            const duration = cardDurations[cardIndex];
-            cumulativeTime += duration;
+        function startCardSequence() {
+            let cumulativeTime = 0;
+            sortedCards.forEach((card, cardIndex) => {
+                const cardStartTime = cumulativeTime;
+                const duration = cardDurations[cardIndex];
+                cumulativeTime += duration;
 
-            const t = setTimeout(() => {
-                displayRevealCardStep(container, card, cardIndex);
-            }, cardStartTime);
-            revealTimeouts.push(t);
-        });
+                const t = setTimeout(() => {
+                    displayRevealCardStep(container, card, cardIndex);
+                }, cardStartTime);
+                revealTimeouts.push(t);
+            });
+        }
+
+        // Write the whole prompt on first, then wait 1 second before answers come in
+        if (promptReminder && fullPrompt) {
+            promptReminder.setAttribute("data-typed-text", pText);
+            typeTerminalText(promptReminder, fullPrompt, {
+                speed: 16,
+                cursor: true,
+                onComplete: () => {
+                    const tWait = setTimeout(() => {
+                        startCardSequence();
+                    }, 1000);
+                    revealTimeouts.push(tWait);
+                }
+            });
+        } else {
+            const tWait = setTimeout(() => {
+                startCardSequence();
+            }, 1000);
+            revealTimeouts.push(tWait);
+        }
     }
 }
 
@@ -623,7 +716,7 @@ function displayRevealCardStep(container, card, cardIndex) {
             <div class="vote-stamps-corner" id="stamps-corner-${cardIndex}"></div>
         </div>
         <div style="font-size: 1.25rem; margin: 10px 0;">${content}</div>
-        <div class="reveal-card-details" id="details-card-${cardIndex}" style="font-size: 1rem; color: #d1d5db; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 8px; ${voteCount > 0 ? 'opacity: 0; transition: opacity 0.3s ease;' : ''}">
+        <div class="reveal-card-details" id="details-card-${cardIndex}" style="font-size: 1rem; color: #d1d5db; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; margin-top: 8px; opacity: 0; transition: opacity 0.35s ease;">
             ${votersText}
             ${pointsNotice}
         </div>
@@ -640,17 +733,23 @@ function displayRevealCardStep(container, card, cardIndex) {
         const badge = document.createElement("span");
         badge.className = isBot ? "zero-votes-badge bot-undetected-badge" : "zero-votes-badge";
         badge.innerText = isBot ? "0 votes (Undetected!)" : "0 votes";
-        corner.appendChild(badge);
 
-        // De-emphasize active highlight after beat
+        // Give players 800ms to read answer text before showing zero-votes badge and details
+        const tZero = setTimeout(() => {
+            corner.appendChild(badge);
+            if (details) details.style.opacity = "1";
+        }, 800);
+        revealTimeouts.push(tZero);
+
+        // Keep active highlight for players to read the status
         const tActive = setTimeout(() => {
             cardDiv.classList.remove("revealing-active");
-        }, 700);
+        }, 3000);
         revealTimeouts.push(tActive);
     } else {
-        // Sequentially stamp each robot emoji in short succession
+        // Give players 800ms to read answer text before stamps begin slamming down
         for (let i = 0; i < voteCount; i++) {
-            const stampDelay = 250 + (i * 280);
+            const stampDelay = 800 + (i * 450);
             const tStamp = setTimeout(() => {
                 const stamp = document.createElement("div");
                 stamp.className = "vote-stamp";
@@ -667,8 +766,8 @@ function displayRevealCardStep(container, card, cardIndex) {
             revealTimeouts.push(tStamp);
         }
 
-        // Once all stamps slammed down: show vote count pill, reveal details, and remove active pulse
-        const finishDelay = 250 + (voteCount * 280) + 120;
+        // Once all stamps slammed down: show vote count pill and reveal details
+        const finishDelay = 800 + (voteCount * 450) + 150;
         const tFinish = setTimeout(() => {
             const countPill = document.createElement("span");
             countPill.className = "vote-count-pill";
@@ -676,9 +775,14 @@ function displayRevealCardStep(container, card, cardIndex) {
             corner.appendChild(countPill);
 
             if (details) details.style.opacity = "1";
-            cardDiv.classList.remove("revealing-active");
         }, finishDelay);
         revealTimeouts.push(tFinish);
+
+        // Give players 2.2s of active glow to read who voted and point penalties before removing active glow
+        const tActive = setTimeout(() => {
+            cardDiv.classList.remove("revealing-active");
+        }, finishDelay + 2200);
+        revealTimeouts.push(tActive);
     }
 }
 
@@ -864,4 +968,47 @@ function escapeHtml(str) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+// --- Title Screen & Audio Controls Bridge ---
+let isHostLaunched = false;
+
+function launchHostSystem() {
+    if (isHostLaunched) return;
+    isHostLaunched = true;
+
+    // Directly initialize AudioContext and trigger BGM from this direct user click
+    if (window.bgmManager && typeof window.bgmManager.startFromUserGesture === "function") {
+        window.bgmManager.startFromUserGesture();
+    }
+
+    const titleScreen = document.getElementById("host-title-screen");
+    if (titleScreen) {
+        titleScreen.classList.add("fade-out");
+        setTimeout(() => {
+            titleScreen.style.display = "none";
+        }, 400);
+    }
+}
+
+// Pressing Space or Enter engages the title screen
+window.addEventListener("keydown", (e) => {
+    if (!isHostLaunched && (e.code === "Space" || e.code === "Enter")) {
+        e.preventDefault();
+        launchHostSystem();
+    }
+});
+
+function toggleBgmAudio() {
+    if (!isHostLaunched) {
+        launchHostSystem();
+        return;
+    }
+    if (window.bgmManager) {
+        window.bgmManager.cycleVolume();
+    }
+}
+
+function unlockAudioPrompt() {
+    launchHostSystem();
 }

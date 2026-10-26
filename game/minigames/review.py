@@ -1,116 +1,32 @@
 import random
-from typing import Dict, Any
+from typing import Dict, Any, List
 from game.minigames.base import BaseMinigame
 
-REVIEW_PRODUCTS = [
-    {
-        "product": "A standard yellow No. 2 pencil",
-        "fallbacks": [
-            "Lead broke immediately",
-            "Eraser just smudged everything into a black smear",
-            "Snapped in half on first use",
-            "Worst pencil ever, constantly broke"
-        ]
-    },
-    {
-        "product": "A bottle of municipal tap water",
-        "fallbacks": [
-            "Tastes like straight rust and old pipes",
-            "Was literally warm and gross",
-            "Tastes like hose water",
-            "Zero stars, just drink from a puddle"
-        ]
-    },
-    {
-        "product": "A 12-inch clear plastic ruler",
-        "fallbacks": [
-            "Snapped in my backpack on day one",
-            "So clear I immediately lost it on my desk",
-            "Numbers rubbed off after one week",
-            "Sharp edges, cheap brittle plastic"
-        ]
-    },
-    {
-        "product": "A brown cardboard box",
-        "fallbacks": [
-            "Arrived crushed and soaked",
-            "Fell apart as soon as I picked it up",
-            "Literally just a flimsy piece of cardboard",
-            "Bottom ripped open and dropped everything"
-        ]
-    },
-    {
-        "product": "A pack of unscented paper napkins",
-        "fallbacks": [
-            "Ripped immediately when wet",
-            "Felt like sandpaper on my face",
-            "Absorbed nothing and tore in half",
-            "Super thin and completely useless"
-        ]
-    },
-    {
-        "product": "A pair of generic white athletic socks",
-        "fallbacks": [
-            "Got holes in the toe on the very first step",
-            "Slid down into my shoes every three seconds",
-            "One sock was mysteriously three inches shorter",
-            "Turned into tissue paper after one gentle wash"
-        ]
-    },
-    {
-        "product": "An ordinary metal paperclip",
-        "fallbacks": [
-            "Bent out of shape trying to hold two sheets",
-            "Rust immediately appeared in humid air",
-            "Tore through my important tax documents",
-            "Snapped in half when unbending"
-        ]
-    },
-    {
-        "product": "A standard wooden toothpick",
-        "fallbacks": [
-            "Splintered right between my back molars",
-            "Snapped under the slightest pressure",
-            "Tasted heavily like tree bark and dirt",
-            "Completely blunt, did not pick anything"
-        ]
-    },
-    {
-        "product": "A basic USB wall charger",
-        "fallbacks": [
-            "Took 11 hours to charge my phone 3 percent",
-            "Emitted a high-pitched buzzing screech all night",
-            "Heated up enough to toast an english muffin",
-            "Prongs bent instantly plugging into the wall"
-        ]
-    },
-    {
-        "product": "A roll of aluminum foil",
-        "fallbacks": [
-            "Didn't protect me from aliens",
-            "I got one clean sheet and then it never tore straight again",
-            "The cookies still got stale",
-            "Foiled my plans of world domination"
-        ]
-    },
-    {
-        "product": "A bag of plain ice cubes",
-        "fallbacks": [
-            "Melted completely into water, total ripoff",
-            "Way too cold to enjoy comfortably",
-            "All stuck together in one giant unyielding brick",
-            "Tasted vaguely like the bottom of a freezer"
-        ]
-    },
-    {
-        "product": "A retractable blue ballpoint pen",
-        "fallbacks": [
-            "Exploded blue ink inside my favorite shirt",
-            "Clicker got jammed permanently down on day two",
-            "Scratched deep grooves into the paper without inking",
-            "Skipped every other letter I attempted to write"
-        ]
-    }
+# Simple product strings for easy expansion
+REVIEW_PRODUCTS: List[str] = [
+    "A standard yellow No. 2 pencil",
+    "A bottle of municipal tap water",
+    "A 12-inch clear plastic ruler",
+    "A brown cardboard box",
+    "A pack of unscented paper napkins",
+    "A pair of generic white athletic socks",
+    "An ordinary metal paperclip",
+    "A standard wooden toothpick",
+    "A basic USB wall charger",
+    "A roll of aluminum foil",
+    "A bag of plain ice cubes",
+    "A retractable blue ballpoint pen",
+]
+
+# Shared generic emergency 1-star complaints if Ollama is offline or times out
+GENERIC_REVIEW_FALLBACKS = [
+    "Broke after five minutes of use",
+    "Terrible quality, completely useless",
+    "Do not recommend, huge waste of money",
+    "Arrived damaged and smelled weird",
+    "0 stars if I could. Awful",
+    "Fell apart immediately",
+    "Worst purchase I have ever made"
 ]
 
 class OneStarReviewGame(BaseMinigame):
@@ -130,16 +46,26 @@ class OneStarReviewGame(BaseMinigame):
         chosen_list = [pool[i % len(pool)] for i in range(self.questions_count)]
 
         self.questions = []
-        for i, chosen in enumerate(chosen_list):
+        for i, item in enumerate(chosen_list):
+            if isinstance(item, str):
+                product = item
+                fallbacks = None
+            else:
+                product = item.get("product", "")
+                fallbacks = item.get("fallbacks")
+
             self.questions.append({
                 "index": i,
                 "prompt_data": {
                     "type": "text",
-                    "prompt_text": f"Product: {chosen['product']}",
-                    "item_name": chosen["product"],
+                    "prompt_text": f"Product: {product}",
+                    "item_name": product,
                     "placeholder": "Write your 1-star review here..."
                 },
-                "meta": chosen,
+                "meta": {
+                    "product": product,
+                    "fallbacks": fallbacks
+                },
                 "submissions": {},
                 "votes": {},
                 "bot_ids": []
@@ -147,7 +73,7 @@ class OneStarReviewGame(BaseMinigame):
 
     def _generate_bots(self):
         for q in self.questions:
-            chosen = q["meta"]
+            meta = q["meta"]
             for i in range(self.bot_count):
                 bot_id = f"bot_{i+1}"
                 bot_name = self.bot_engine.get_bot_display_name()
@@ -155,8 +81,8 @@ class OneStarReviewGame(BaseMinigame):
                     q["bot_ids"].append(bot_id)
 
                 review = self.bot_engine.generate_review(
-                    product_name=chosen["product"],
-                    fallback_answers=chosen["fallbacks"]
+                    product_name=meta["product"],
+                    fallback_answers=meta.get("fallbacks")
                 )
 
                 sub_id = f"sub_{bot_id}"
@@ -171,8 +97,13 @@ class OneStarReviewGame(BaseMinigame):
                 }
 
     def _get_fallback_response_for_question(self, q: Dict[str, Any]) -> str:
-        chosen = q.get("meta")
-        if chosen and chosen.get("fallbacks"):
-            chosen_ans = random.choice(chosen["fallbacks"])
-            return chosen_ans[0].upper() + chosen_ans[1:] if chosen_ans else ""
-        return "Broke immediately, waste of money"
+        meta = q.get("meta", {})
+        fallbacks = meta.get("fallbacks") if isinstance(meta, dict) else None
+        if fallbacks:
+            chosen = random.choice(fallbacks)
+            return chosen[0].upper() + chosen[1:] if chosen else ""
+        return random.choice(GENERIC_REVIEW_FALLBACKS)
+
+    def _get_fallback_response(self) -> str:
+        return random.choice(GENERIC_REVIEW_FALLBACKS)
+

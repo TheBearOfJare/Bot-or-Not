@@ -1,134 +1,34 @@
 import random
-from typing import Dict, Any
+from typing import Dict, Any, List
 from game.minigames.base import BaseMinigame
 
-PUN_PROMPTS = [
-    {
-        "setup": "Why don't skeletons fight each other? Because...",
-        "fallbacks": [
-            "They don't have the guts",
-            "Their hearts aren't in it",
-            "They got no backbone",
-            "They have no stomach for it"
-        ]
-    },
-    {
-        "setup": "I told my suitcase there will be no vacation this year. Now...",
-        "fallbacks": [
-            "I'm dealing with emotional baggage",
-            "It won't talk to me",
-            "It's completely packed with rage",
-            "It won't open up to me"
-        ]
-    },
-    {
-        "setup": "Parallel lines have so much in common. It's a shame...",
-        "fallbacks": [
-            "They'll never meet",
-            "They never cross paths",
-            "They never get together",
-            "They're always apart"
-        ]
-    },
-    {
-        "setup": "What do you call a fake noodle? An...",
-        "fallbacks": [
-            "Impasta",
-            "Impasta obviously",
-            "Im-pasta",
-            "Impostor pasta"
-        ]
-    },
-    {
-        "setup": "Why did the scarecrow win an award? Because he was...",
-        "fallbacks": [
-            "Outstanding in his field",
-            "Out standing in his field",
-            "Just standing there",
-            "The only one who showed up"
-        ]
-    },
-    {
-        "setup": "I used to play piano by ear, but now I...",
-        "fallbacks": [
-            "Use my hands",
-            "Use my fingers like a normal person",
-            "Just listen to Spotify",
-            "Gave up completely"
-        ]
-    },
-    {
-        "setup": "Why did the tomato blush? Because...",
-        "fallbacks": [
-            "It saw the salad dressing",
-            "Someone caught it undressed",
-            "It was ripe with embarrassment",
-            "It dropped its peel"
-        ]
-    },
-    {
-        "setup": "I'm reading a book on anti-gravity. It's impossible to...",
-        "fallbacks": [
-            "Put down",
-            "Keep my feet on the ground",
-            "Drop it",
-            "Stay grounded"
-        ]
-    },
-    {
-        "setup": "Why can't you trust stairs? Because...",
-        "fallbacks": [
-            "They're always up to something",
-            "They always let you down",
-            "They take steps behind your back",
-            "They're full of shady steps"
-        ]
-    },
-    {
-        "setup": "What do you call a sleeping dinosaur? A...",
-        "fallbacks": [
-            "Dino-snore",
-            "T-Wrecks",
-            "Jurassic snorer",
-            "Fossilized sleeper"
-        ]
-    },
-    {
-        "setup": "Why did the golfer bring two pairs of pants? In case...",
-        "fallbacks": [
-            "He got a hole in one",
-            "He shanked into the pond",
-            "The first pair got stained",
-            "He ripped them driving"
-        ]
-    },
-    {
-        "setup": "I used to be a personal banker, but then I...",
-        "fallbacks": [
-            "Lost interest",
-            "Ran out of balance",
-            "Withdrew from society",
-            "Defaulted on my enthusiasm"
-        ]
-    },
-    {
-        "setup": "Why did the bicycle fall over? Because...",
-        "fallbacks": [
-            "It was two-tired",
-            "It couldn't stand on its own",
-            "Its kickstand quit",
-            "It lost momentum"
-        ]
-    },
-    {
-        "setup": "What do you call cheese that isn't yours? ...",
-        "fallbacks": [
-            "Nacho cheese",
-            "Stolen cheddar",
-            "Not-yo cheese",
-            "Somebody else's snack"
-        ]
-    }
+# Simple prompt strings for easy expansion
+PUN_PROMPTS: List[str] = [
+    "Why don't skeletons fight each other? Because...",
+    "I told my suitcase there will be no vacation this year. Now...",
+    "Parallel lines have so much in common. It's a shame...",
+    "What do you call a fake noodle? An...",
+    "Why did the scarecrow win an award? Because he was...",
+    "I used to play piano by ear, but now I...",
+    "Why did the tomato blush? Because...",
+    "I'm reading a book on anti-gravity. It's impossible to...",
+    "Why can't you trust stairs? Because...",
+    "What do you call a sleeping dinosaur? A...",
+    "Why did the golfer bring two pairs of pants? In case...",
+    "I used to be a personal banker, but then I...",
+    "Why did the bicycle fall over? Because...",
+    "What do you call cheese that isn't yours? ...",
+]
+
+# Shared generic emergency fallbacks if Ollama is offline or times out
+GENERIC_PUN_FALLBACKS = [
+    "I have no idea honestly",
+    "Nobody knows",
+    "Too cheesy to say out loud",
+    "They just gave up",
+    "It seemed like a good idea at the time",
+    "Ask again later",
+    "It's a mystery to everyone"
 ]
 
 class CompleteThePunGame(BaseMinigame):
@@ -148,15 +48,25 @@ class CompleteThePunGame(BaseMinigame):
         chosen_list = [pool[i % len(pool)] for i in range(self.questions_count)]
 
         self.questions = []
-        for i, chosen in enumerate(chosen_list):
+        for i, item in enumerate(chosen_list):
+            if isinstance(item, str):
+                setup = item
+                fallbacks = None
+            else:
+                setup = item.get("setup", "")
+                fallbacks = item.get("fallbacks")
+
             self.questions.append({
                 "index": i,
                 "prompt_data": {
                     "type": "text",
-                    "prompt_text": chosen["setup"],
+                    "prompt_text": setup,
                     "placeholder": "Enter your punchline..."
                 },
-                "meta": chosen,
+                "meta": {
+                    "setup": setup,
+                    "fallbacks": fallbacks
+                },
                 "submissions": {},
                 "votes": {},
                 "bot_ids": []
@@ -164,7 +74,7 @@ class CompleteThePunGame(BaseMinigame):
 
     def _generate_bots(self):
         for q in self.questions:
-            chosen = q["meta"]
+            meta = q["meta"]
             for i in range(self.bot_count):
                 bot_id = f"bot_{i+1}"
                 bot_name = self.bot_engine.get_bot_display_name()
@@ -172,8 +82,8 @@ class CompleteThePunGame(BaseMinigame):
                     q["bot_ids"].append(bot_id)
 
                 punchline = self.bot_engine.generate_pun_punchline(
-                    pun_setup=chosen["setup"],
-                    fallback_answers=chosen["fallbacks"]
+                    pun_setup=meta["setup"],
+                    fallback_answers=meta.get("fallbacks")
                 )
 
                 sub_id = f"sub_{bot_id}"
@@ -188,8 +98,13 @@ class CompleteThePunGame(BaseMinigame):
                 }
 
     def _get_fallback_response_for_question(self, q: Dict[str, Any]) -> str:
-        chosen = q.get("meta")
-        if chosen and chosen.get("fallbacks"):
-            chosen_ans = random.choice(chosen["fallbacks"])
-            return chosen_ans[0].upper() + chosen_ans[1:] if chosen_ans else ""
-        return "They don't have the guts"
+        meta = q.get("meta", {})
+        fallbacks = meta.get("fallbacks") if isinstance(meta, dict) else None
+        if fallbacks:
+            chosen = random.choice(fallbacks)
+            return chosen[0].upper() + chosen[1:] if chosen else ""
+        return random.choice(GENERIC_PUN_FALLBACKS)
+
+    def _get_fallback_response(self) -> str:
+        return random.choice(GENERIC_PUN_FALLBACKS)
+
