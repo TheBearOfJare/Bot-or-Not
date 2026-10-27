@@ -55,6 +55,11 @@ class BotEngine:
             if clean_setup and clean_setup.lower() in raw.lower():
                 pattern = re.escape(clean_setup) + r"[\s.?:–-]*"
                 raw = re.sub(pattern, "", raw, flags=re.IGNORECASE).strip()
+            # Also strip sub-clauses from setup (e.g. after colon or quotes)
+            subparts = [p.strip() for p in re.split(r"[:\"'\n]", clean_setup) if len(p.strip().split()) >= 2]
+            for sp in subparts:
+                if raw.lower().startswith(sp.lower()):
+                    raw = raw[len(sp):].strip(" :–-.,")
 
         # If multiple lines, locate first content line (skip header/preamble lines)
         lines = [line.strip() for line in raw.splitlines() if line.strip()]
@@ -238,22 +243,32 @@ class BotEngine:
 
         return candidates[0]
 
-    def generate_pun_punchline(self, pun_setup: str, fallback_answers: list = None, num_candidates: int = 3) -> str:
+    def build_pun_prompt(self, pun_setup: str, extra_instruction: str = "") -> tuple[str, str]:
         prompt = (
-            f"You are playing a party game where you complete a pun or joke with a funny punchline.\n"
+            f"You are a witty human player in a party comedy game (like Quiplash or Cards Against Humanity) typing a quick, funny answer on your phone.\n"
+            f"Write a hilarious punchline (1 to 6 words) to complete or answer this prompt:\n"
             f"Prompt: {pun_setup}\n\n"
-            f"Instructions:\n"
-            f"- Write ONLY the punchline / wordplay completion (1 to 7 words).\n"
-            f"- Make it a clever pun or joke punchline fitting the prompt. Some puns make use of portmento (combining words/sounds) or malepropism (substituting similar-sounding words).\n"
-            f"- Do NOT repeat the setup.\n"
-            f"- Output ONLY the punchline text. Do NOT start with ellipses or dots (...).\n"
-            f"- No quotes, no explanations, no conversational intro, and no meta humor."
+            f"How to make it funny (pick the angle that fits best):\n"
+            f"- Clever double meaning or wordplay that fits naturally (e.g. a relationship that 'had no future', a balloon business that 'never took off')\n"
+            f"- Relatable truth or sarcastic twist (e.g. introverts' candle smelling like 'cancelled plans', coffee called 'liquid panic')\n"
+            f"- An absurd, deadpan, or unexpected punchline\n\n"
+            f"CRITICAL RULES:\n"
+            f"- Must make grammatical sense in natural English. Do NOT invent gibberish or broken words just to force a pun.\n"
+            f"- If the prompt ends with '...', your punchline must complete the sentence seamlessly.\n"
+            f"- 1 to 6 words only.\n"
+            f"- Output ONLY the punchline. No quotes, no explanations, no conversational intro."
         )
-        sys_prompt = "You are a witty party game player who writes clever punchlines, puns, and jokes."
+        if extra_instruction:
+            prompt += f"\n- {extra_instruction}"
+        sys_prompt = "You are a witty comedian playing a fast party game on your phone, writing punchy, natural, and hilarious punchlines."
+        return prompt, sys_prompt
+
+    def generate_pun_punchline(self, pun_setup: str, fallback_answers: list = None, num_candidates: int = 3) -> str:
+        prompt, sys_prompt = self.build_pun_prompt(pun_setup)
         
         candidates = []
         for _ in range(num_candidates):
-            ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.85, top_k=50)
+            ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.75, top_k=40)
             if ans:
                 cleaned = self.clean_human_response(ans, max_words=10, strip_setup=pun_setup)
                 if cleaned and cleaned not in candidates:
@@ -276,14 +291,20 @@ class BotEngine:
             "Ask again later"
         ])
 
-    def generate_review(self, product_name: str, fallback_answers: list = None, num_candidates: int = 3) -> str:
+    def build_review_prompt(self, product_name: str, extra_instruction: str = "") -> tuple[str, str]:
         prompt = (
             f"You are a human playing a rapid party game on your phone with 20 seconds to answer.\n"
             f"Write a 1-star customer review for: '{product_name}'.\n"
             f"Write ONE short, possibly funny complaint (3 to 10 words) about a specific annoying flaw, awkward situation, or ironic downside of this exact product.\n"
             f"Be creative and relatable (do NOT just say 'it broke' or 'cheap plastic'). Sound like an annoyed customer typing fast on a phone. No quotes."
         )
+        if extra_instruction:
+            prompt += f"\n- {extra_instruction}"
         sys_prompt = "You type brief, specific, and clear 1-star customer complaints on a phone keyboard."
+        return prompt, sys_prompt
+
+    def generate_review(self, product_name: str, fallback_answers: list = None, num_candidates: int = 3) -> str:
+        prompt, sys_prompt = self.build_review_prompt(product_name)
 
         candidates = []
         for _ in range(num_candidates):
@@ -310,7 +331,7 @@ class BotEngine:
             "Worst purchase I have ever made"
         ])
 
-    def generate_survey_answers(self, survey_prompt: str, fallback_answers: list = None) -> list:
+    def build_survey_prompt(self, survey_prompt: str, extra_instruction: str = "") -> tuple[str, str]:
         prompt = (
             f"Party game like Family Feud. You have 20 seconds on your phone to submit 3 answers.\n"
             f"Question: '{survey_prompt}'\n\n"
@@ -320,7 +341,13 @@ class BotEngine:
             f"- Keep each answer very short (1 to 4 words).\n"
             f"- Output ONLY the 3 answers separated by commas. No numbering, no extra text."
         )
+        if extra_instruction:
+            prompt += f"\n- {extra_instruction}"
         sys_prompt = "You are a party game player answering survey questions with 3 concise answers separated by commas."
+        return prompt, sys_prompt
+
+    def generate_survey_answers(self, survey_prompt: str, fallback_answers: list = None) -> list:
+        prompt, sys_prompt = self.build_survey_prompt(survey_prompt)
         ans = self.query_ollama(prompt, sys_prompt, num_predict=45, temperature=0.75, top_k=60)
         if ans:
             parts = [self.clean_human_response(p, max_words=5, strip_final_period=True) for p in ans.split(",") if p.strip()]
