@@ -43,7 +43,7 @@ class BGMManager {
             energy: null
         };
 
-        this.loopDuration = 14.77; // Computed exactly after trimming silence
+        this.loopDuration = 14.7692; // 8 bars @ 130 BPM 4/4 (240/130 * 8 = 14.769231s)
         this.loopStartTime = 0;
 
         this.activeTrack = "none";    // "main", "chill", "escalation", "energy", "silent"
@@ -132,73 +132,113 @@ class BGMManager {
     }
 
     /**
-     * Trims leading encoder delay (~1000-1280 frames) and trailing padding from MP3
-     * to ensure 100% gapless looping on repeats without audio hitching.
+     * Exact 130 BPM (4/4 time) Sample-Accurate Buffer Slicing & Boundary Alignment
+     *
+     * Musical timing:
+     * - Tempo: 130 BPM
+     * - 1 Beat = 60 / 130 = 0.461538... sec
+     * - 1 Bar  = 240 / 130 = 1.846154... sec
+     *
+     * Track specifications:
+     * - Intro: 10 bars = 40 beats = 18.461538s (814,154 samples @ 44.1kHz, 886,154 @ 48kHz)
+     * - Loop:  40 bars = 160 beats = 73.846154s (3,256,615 samples @ 44.1kHz, 3,544,615 @ 48kHz)
+     * - Stems (Chill, Escalation, Energy):
+     *          8 bars = 32 beats = 14.769231s (651,323 samples @ 44.1kHz, 708,923 @ 48kHz)
+     *
+     * Detects the first downbeat transient (stripping the ~29ms MP3 encoder priming delay),
+     * slices exactly to the musical bar boundary, and applies a smooth Hann boundary taper
+     * to the tail of looping tracks matching dst[0] to eliminate loop wraparound clicks
+     * without dampening the downbeat attack transient.
      */
-    trimAudioBuffer(buffer, threshold = 0.0025) {
-        if (!this.ctx) return buffer;
+    processTrackBuffer(key, buffer) {
+        if (!this.ctx || !buffer) return buffer;
+
+        const specs = {
+            intro:      { bars: 10, isLoop: false },
+            loop:       { bars: 40, isLoop: true  },
+            chill:      { bars: 8,  isLoop: true  },
+            escalation: { bars: 8,  isLoop: true  },
+            energy:     { bars: 8,  isLoop: true  }
+        };
+
+        const spec = specs[key];
+        if (!spec) return buffer;
+
+        const sr = buffer.sampleRate;
+        const bpm = 130;
+        const samplesPerBar = sr * (240 / bpm);
+        const targetLen = Math.round(spec.bars * samplesPerBar);
         const numChannels = buffer.numberOfChannels;
-        const len = buffer.length;
+        const rawLen = buffer.length;
+
+        // Detect first downbeat transient after MP3 encoder delay (~26-30ms)
         let start = 0;
-        let end = len;
-
-        // Find first non-silent sample
-        for (let i = 0; i < len; i++) {
+        const searchLimit = Math.min(4000, rawLen);
+        for (let i = 0; i < searchLimit; i++) {
             let hasSignal = false;
             for (let ch = 0; ch < numChannels; ch++) {
-                if (Math.abs(buffer.getChannelData(ch)[i]) > threshold) {
+                if (Math.abs(buffer.getChannelData(ch)[i]) > 0.012) {
                     hasSignal = true;
                     break;
                 }
             }
             if (hasSignal) {
-                start = Math.max(0, i - 16);
+                start = i;
                 break;
             }
         }
 
-        // Find last non-silent sample
-        for (let i = len - 1; i >= 0; i--) {
-            let hasSignal = false;
-            for (let ch = 0; ch < numChannels; ch++) {
-                if (Math.abs(buffer.getChannelData(ch)[i]) > threshold) {
-                    hasSignal = true;
+        // Secondary fallback if attack is softer
+        if (start === 0) {
+            for (let i = 0; i < searchLimit; i++) {
+                let hasSignal = false;
+                for (let ch = 0; ch < numChannels; ch++) {
+                    if (Math.abs(buffer.getChannelData(ch)[i]) > 0.003) {
+                        hasSignal = true;
+                        break;
+                    }
+                }
+                if (hasSignal) {
+                    start = i;
                     break;
                 }
             }
-            if (hasSignal) {
-                end = Math.min(len, i + 1 + 16);
-                break;
-            }
         }
 
-        const trimmedLen = Math.max(1, end - start);
-        const trimmed = this.ctx.createBuffer(numChannels, trimmedLen, buffer.sampleRate);
+        if (start + targetLen > rawLen) {
+            start = Math.max(0, rawLen - targetLen);
+        }
+
+        const clean = this.ctx.createBuffer(numChannels, targetLen, sr);
         for (let ch = 0; ch < numChannels; ch++) {
             const src = buffer.getChannelData(ch);
-            const dst = trimmed.getChannelData(ch);
-            dst.set(src.subarray(start, end));
+            const dst = clean.getChannelData(ch);
+            dst.set(src.subarray(start, start + targetLen));
 
-            // Apply a subtle 128-sample (~2.9ms) micro-taper at loop boundaries to eliminate zero-crossing clicks
-            const taperLen = Math.min(128, Math.floor(trimmedLen / 4));
-            for (let f = 0; f < taperLen; f++) {
-                const factor = f / taperLen;
-                dst[f] *= factor;
-                dst[trimmedLen - 1 - f] *= factor;
+            // If track loops, smoothly blend the last 128 samples (~2.9ms) to connect seamlessly to dst[0]
+            // This eliminates loop turnaround clicks without altering the attack transient of dst[0].
+            if (spec.isLoop && targetLen > 256) {
+                const K = 128;
+                const delta = dst[0] - dst[targetLen - 1];
+                for (let i = 0; i < K; i++) {
+                    const factor = 0.5 * (1 - Math.cos(Math.PI * (i + 1) / K));
+                    dst[targetLen - K + i] += delta * factor;
+                }
             }
         }
-        return trimmed;
+
+        return clean;
     }
 
     equalizeStemBuffers() {
         if (!this.buffers.chill || !this.buffers.escalation || !this.buffers.energy) return;
 
-        const lenChill = this.buffers.chill.length;
-        const lenEsc = this.buffers.escalation.length;
-        const lenEnergy = this.buffers.energy.length;
-
         // Equalize all 3 stems to the minimum sample count so they are 100% sample-identical in duration
-        const targetLen = Math.min(lenChill, lenEsc, lenEnergy);
+        const targetLen = Math.min(
+            this.buffers.chill.length,
+            this.buffers.escalation.length,
+            this.buffers.energy.length
+        );
         this.loopDuration = targetLen / this.ctx.sampleRate;
 
         const trimToLength = (buf) => {
@@ -243,8 +283,8 @@ class BGMManager {
             }
 
             if (rawBuf) {
-                // Trim leading encoder delay & trailing padding for seamless looping
-                this.buffers[key] = this.trimAudioBuffer(rawBuf);
+                // Musical 130 BPM grid alignment and seamless boundary preparation
+                this.buffers[key] = this.processTrackBuffer(key, rawBuf);
             }
             return this.buffers[key];
         };
@@ -341,12 +381,35 @@ class BGMManager {
                 trackGain.connect(this.bgmGain);
 
                 introNode.start(now);
-                // Sample-accurate scheduled transition from trimmed Intro to trimmed Loop
+                // Sample-accurate scheduled transition from 10-bar Intro to 40-bar Loop
                 loopNode.start(now + this.buffers.intro.duration);
+
+                introNode.onended = () => {
+                    try { introNode.disconnect(); } catch (e) {}
+                };
 
                 this.activeNodes.push({ source: introNode, gain: trackGain }, { source: loopNode, gain: trackGain });
             } catch (err) {
                 console.warn("[BGMManager] Error playing main track:", err);
+            }
+        } else if (this.buffers.loop) {
+            try {
+                const now = this.ctx.currentTime + 0.05;
+                const loopNode = this.ctx.createBufferSource();
+                loopNode.buffer = this.buffers.loop;
+                loopNode.loop = true;
+
+                const trackGain = this.ctx.createGain();
+                trackGain.gain.setValueAtTime(0.001, now);
+                trackGain.gain.linearRampToValueAtTime(1.0, now + 0.4);
+
+                loopNode.connect(trackGain);
+                trackGain.connect(this.bgmGain);
+
+                loopNode.start(now);
+                this.activeNodes.push({ source: loopNode, gain: trackGain });
+            } catch (err) {
+                console.warn("[BGMManager] Error playing loop-only main track:", err);
             }
         }
     }

@@ -151,7 +151,7 @@ class BotEngine:
             payload = {
                 "model": self.model,
                 "prompt": prompt,
-                "system": system_prompt or "You are a human playing a fast party game on your phone with friends under a 30-second timer. You type quick, short, casual, and believable responses.",
+                "system": system_prompt or "You are a human playing a fast party game on your phone with friends under a 30-second timer. You type quick, short, casual, and possibly humorous responses.",
                 "stream": False,
                 "think": False,
                 "options": {
@@ -198,13 +198,13 @@ class BotEngine:
             f"Prompt: {pun_setup}\n\n"
             f"Instructions:\n"
             f"- Write ONLY the punchline / wordplay completion (1 to 7 words).\n"
-            f"- Make it a clever pun or joke punchline fitting the prompt.\n"
+            f"- Make it a clever pun or joke punchline fitting the prompt. Some puns make use of portmento (combining words/sounds) or malepropism (substituting similar-sounding words).\n"
             f"- Do NOT repeat the setup.\n"
             f"- Output ONLY the punchline text. Do NOT start with ellipses or dots (...).\n"
             f"- No quotes, no explanations, no conversational intro, and no meta humor."
         )
         sys_prompt = "You are a witty party game player who writes clever punchlines, puns, and jokes."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.75, top_k=50)
+        ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.70, top_k=50)
         if ans:
             cleaned = self.clean_human_response(ans, max_words=10, strip_setup=pun_setup)
             if cleaned:
@@ -225,11 +225,11 @@ class BotEngine:
         prompt = (
             f"You are a human playing a rapid party game on your phone with 20 seconds to answer.\n"
             f"Write a 1-star customer review for: '{product_name}'.\n"
-            f"Write ONE short, funny complaint (3 to 10 words) about a specific annoying flaw, awkward situation, or ironic downside of this exact product.\n"
+            f"Write ONE short, possibly funny complaint (3 to 10 words) about a specific annoying flaw, awkward situation, or ironic downside of this exact product.\n"
             f"Be creative and relatable (do NOT just say 'it broke' or 'cheap plastic'). Sound like an annoyed customer typing fast on a phone. No quotes."
         )
-        sys_prompt = "You type quick, witty, and blunt 1-star customer complaints on a phone keyboard."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.8, top_k=60)
+        sys_prompt = "You type brief, specific, and clear 1-star customer complaints on a phone keyboard."
+        ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.70, top_k=50)
         if ans:
             cleaned = self.clean_human_response(ans, max_words=11, strip_setup=product_name)
             if cleaned:
@@ -257,7 +257,7 @@ class BotEngine:
             f"- Output ONLY the 3 answers separated by commas. No numbering, no extra text."
         )
         sys_prompt = "You are a party game player answering survey questions with 3 concise answers separated by commas."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=45, temperature=0.75, top_k=50)
+        ans = self.query_ollama(prompt, sys_prompt, num_predict=45, temperature=0.75, top_k=60)
         if ans:
             parts = [self.clean_human_response(p, max_words=5, strip_final_period=True) for p in ans.split(",") if p.strip()]
             parts = [p for p in parts if p]
