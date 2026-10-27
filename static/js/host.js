@@ -4,6 +4,7 @@ let currentState = null;
 let pollTimer = null;
 let countdownInterval = null;
 let countdownSeconds = 0;
+let isGamePaused = false;
 let lastRenderedPhase = null;
 let lastPromptIndex = -1;
 let lastVoteIndex = -1;
@@ -77,6 +78,10 @@ async function pollHostState() {
         if (res.ok) {
             const data = await res.json();
             currentState = data;
+            if (typeof data.is_paused === "boolean" && data.is_paused !== isGamePaused) {
+                isGamePaused = data.is_paused;
+                updatePauseUi();
+            }
             renderHostView(data);
         }
     } catch (err) {
@@ -165,13 +170,24 @@ let isStartingGame = false;
 // --- Phase 1: Lobby ---
 function renderLobby(state) {
     clearInterval(countdownInterval);
+    if (isGamePaused) {
+        isGamePaused = false;
+        updatePauseUi();
+    }
+
+    const pauseBtn = document.getElementById("btn-pause-game");
+    if (pauseBtn) {
+        pauseBtn.disabled = true;
+        pauseBtn.style.opacity = "0.5";
+        pauseBtn.style.cursor = "not-allowed";
+    }
 
     // Re-enable start game button if returning to lobby
     isStartingGame = false;
     const startBtn = document.getElementById("btn-start-game");
     if (startBtn) {
         startBtn.disabled = false;
-        startBtn.innerHTML = "🚀 START GAME";
+        startBtn.innerHTML = "[ &gt; START EVALUATION SEQUENCE ]";
         startBtn.style.opacity = "1";
         startBtn.style.cursor = "pointer";
     }
@@ -391,13 +407,25 @@ function renderVoting(state, isNewVote) {
     if (state.game_info) {
         document.getElementById("voting-game-title").innerText = state.game_info.title;
         const promptData = state.game_info.prompt_data || {};
+        const isCaptcha = (state.game_info.id === "captcha" || promptData.type === "image_caption" || Boolean(promptData.image_url) || Boolean(state.image_url));
+
         const reminderEl = document.getElementById("voting-prompt-reminder");
         if (reminderEl) {
-            const pText = promptData.prompt_text ? `Prompt: ${promptData.prompt_text}` : "";
-            reminderEl.style.display = promptData.prompt_text ? "block" : "none";
-            if (pText && (isNewVote || reminderEl.getAttribute("data-typed-text") !== pText)) {
-                reminderEl.setAttribute("data-typed-text", pText);
-                typeTerminalText(reminderEl, pText, { speed: 14, cursor: true });
+            if (isCaptcha) {
+                reminderEl.style.display = "none";
+                reminderEl.textContent = "";
+                reminderEl.removeAttribute("data-typed-text");
+                if (reminderEl._termTimer) {
+                    clearTimeout(reminderEl._termTimer);
+                    reminderEl._termTimer = null;
+                }
+            } else {
+                const pText = promptData.prompt_text ? `Prompt: ${promptData.prompt_text}` : "";
+                reminderEl.style.display = promptData.prompt_text ? "block" : "none";
+                if (pText && (isNewVote || reminderEl.getAttribute("data-typed-text") !== pText)) {
+                    reminderEl.setAttribute("data-typed-text", pText);
+                    typeTerminalText(reminderEl, pText, { speed: 14, cursor: true });
+                }
             }
         }
 
@@ -459,9 +487,9 @@ function renderVoting(state, isNewVote) {
     if (state.voting_status) {
         statusList.innerHTML = state.voting_status.map(p => `
             <div class="player-badge ${p.has_voted ? 'ready' : 'pending'}">
-                <span>${p.has_voted ? '🗳️' : '⏳'}</span>
+                <span>${p.has_voted ? '<span class="hl-green">✓</span>' : '<span class="hl-amber">◌</span>'}</span>
                 <span>${escapeHtml(p.name)}</span>
-                <span style="font-size: 0.85rem; color: #9ca3af;">${p.has_voted ? 'Voted' : 'Deciding...'}</span>
+                <span style="font-size: 0.85rem; color: #9ca3af;">${p.has_voted ? '[VOTED]' : '[DECIDING...]'}</span>
             </div>
         `).join("");
     }
@@ -577,8 +605,20 @@ function renderReveal(state, isNewReveal) {
     const revealData = state.reveal_data || {};
     const promptReminder = document.getElementById("reveal-prompt-reminder");
     const pText = revealData.active_prompt_data?.prompt_text || "";
+    const isCaptcha = (revealData.active_prompt_data?.type === "image_caption" || state.game_info?.id === "captcha" || Boolean(revealData.active_prompt_data?.image_url));
+
     if (promptReminder) {
-        promptReminder.style.display = pText ? "block" : "none";
+        if (isCaptcha) {
+            promptReminder.style.display = "none";
+            promptReminder.textContent = "";
+            promptReminder.removeAttribute("data-typed-text");
+            if (promptReminder._termTimer) {
+                clearTimeout(promptReminder._termTimer);
+                promptReminder._termTimer = null;
+            }
+        } else {
+            promptReminder.style.display = pText ? "block" : "none";
+        }
     }
 
     const captchaBox = document.getElementById("reveal-captcha-box");
@@ -600,7 +640,7 @@ function renderReveal(state, isNewReveal) {
     const rawCards = revealData.reveal_cards || [];
     const sortedCards = sortRevealCards(rawCards);
 
-    const revealKey = `${currRevNum}_${pText}`;
+    const revealKey = `${currRevNum}_${pText}_${revealData.active_prompt_data?.image_url || ''}`;
 
     // If new reveal or not currently rendering this question's sequence
     if (isNewReveal || currentRevealingKey !== revealKey) {
@@ -627,7 +667,8 @@ function renderReveal(state, isNewReveal) {
         const totalAnimMs = cardDurations.reduce((sum, d) => sum + d, 0);
 
         // Calculate prompt typing and 1-second pause duration
-        const fullPrompt = pText ? `>> EVALUATING: ${pText}` : "";
+        const showPromptText = !isCaptcha && Boolean(pText);
+        const fullPrompt = showPromptText ? `>> EVALUATING: ${pText}` : "";
         const promptTypingEstMs = fullPrompt ? (fullPrompt.length * 16) : 0;
         const postPromptWaitMs = fullPrompt ? 1000 : 500;
         const initialDelayMs = promptTypingEstMs + postPromptWaitMs;
@@ -640,21 +681,26 @@ function renderReveal(state, isNewReveal) {
         if (bottomTimer) bottomTimer.innerText = totalDurationSec;
 
         function startCardSequence() {
-            let cumulativeTime = 0;
-            sortedCards.forEach((card, cardIndex) => {
-                const cardStartTime = cumulativeTime;
-                const duration = cardDurations[cardIndex];
-                cumulativeTime += duration;
-
-                const t = setTimeout(() => {
-                    displayRevealCardStep(container, card, cardIndex);
-                }, cardStartTime);
+            let cardIndex = 0;
+            function stepNextCard() {
+                if (cardIndex >= sortedCards.length) return;
+                if (isGamePaused) {
+                    const t = setTimeout(stepNextCard, 250);
+                    revealTimeouts.push(t);
+                    return;
+                }
+                const card = sortedCards[cardIndex];
+                const dur = cardDurations[cardIndex];
+                displayRevealCardStep(container, card, cardIndex);
+                cardIndex++;
+                const t = setTimeout(stepNextCard, dur);
                 revealTimeouts.push(t);
-            });
+            }
+            stepNextCard();
         }
 
         // Write the whole prompt on first, then wait 1 second before answers come in
-        if (promptReminder && fullPrompt) {
+        if (showPromptText && promptReminder && fullPrompt) {
             promptReminder.setAttribute("data-typed-text", pText);
             typeTerminalText(promptReminder, fullPrompt, {
                 speed: 16,
@@ -669,7 +715,7 @@ function renderReveal(state, isNewReveal) {
         } else {
             const tWait = setTimeout(() => {
                 startCardSequence();
-            }, 1000);
+            }, 500);
             revealTimeouts.push(tWait);
         }
     }
@@ -698,7 +744,8 @@ function displayRevealCardStep(container, card, cardIndex) {
         }
     } else {
         if (voteCount > 0) {
-            pointsNotice = `<div style="color: #f87171; font-weight: 600; margin-top: 6px;">⚠️ Looked like a bot! (${-(25 * voteCount)} pts penalty to author)</div>`;
+            const alertSvg = window.Icons ? window.Icons.alert : `<span class="hl-red">⚠</span>`;
+            pointsNotice = `<div style="color: #f87171; font-weight: 600; margin-top: 6px; display: flex; align-items: center; justify-content: flex-start; gap: 6px;">${alertSvg} Looked like a bot! (${-(25 * voteCount)} pts penalty to author)</div>`;
         } else {
             pointsNotice = `<div style="color: #9ca3af; margin-top: 6px;">Clearly human, no votes.</div>`;
         }
@@ -844,9 +891,9 @@ function renderBonus(state) {
     if (state.bonus_status) {
         list.innerHTML = state.bonus_status.map(p => `
             <div class="player-badge ${p.has_guessed ? 'ready' : 'pending'}">
-                <span>${p.has_guessed ? '✅' : '🕵️'}</span>
+                <span>${p.has_guessed ? '<span class="hl-green">✓</span>' : '<span class="hl-cyan">⋯</span>'}</span>
                 <span>${escapeHtml(p.name)}</span>
-                <span style="font-size: 0.85rem; color: #9ca3af;">${p.has_guessed ? 'Matches Locked' : 'Matching...'}</span>
+                <span style="font-size: 0.85rem; color: #9ca3af;">${p.has_guessed ? '[MATCHES LOCKED]' : '[MATCHING...]'}</span>
             </div>
         `).join("");
     }
@@ -926,7 +973,17 @@ function startCountdown(seconds, elementId, callback) {
     const bottomRev = document.getElementById("reveal-timer-bottom");
     if (elementId === "reveal-timer" && bottomRev) bottomRev.innerText = countdownSeconds;
 
+    const pauseBtn = document.getElementById("btn-pause-game");
+    if (pauseBtn) {
+        pauseBtn.disabled = false;
+        pauseBtn.style.opacity = "1";
+        pauseBtn.style.cursor = "pointer";
+    }
+
     countdownInterval = setInterval(() => {
+        if (isGamePaused) {
+            return;
+        }
         countdownSeconds -= 1;
         const curSec = Math.max(0, countdownSeconds);
         if (el) el.innerText = curSec;
@@ -939,10 +996,56 @@ function startCountdown(seconds, elementId, callback) {
     }, 1000);
 }
 
+function updatePauseUi() {
+    const pauseBtn = document.getElementById("btn-pause-game");
+    const pauseIcon = document.getElementById("pause-icon");
+    const pauseLabel = document.getElementById("pause-label");
+    const indicator = document.getElementById("auto-pilot-indicator");
+    const indicatorText = document.getElementById("auto-pilot-text");
+
+    if (isGamePaused) {
+        if (pauseBtn) pauseBtn.classList.add("btn-paused");
+        if (pauseIcon && window.Icons) pauseIcon.innerHTML = window.Icons.play;
+        if (pauseLabel) pauseLabel.innerText = "RESUME";
+        if (indicator) indicator.classList.add("paused");
+        if (indicatorText) indicatorText.innerText = "AUTO-PILOT PAUSED";
+        document.querySelectorAll(".timer-pill").forEach(el => el.classList.add("paused"));
+    } else {
+        if (pauseBtn) pauseBtn.classList.remove("btn-paused");
+        if (pauseIcon && window.Icons) pauseIcon.innerHTML = window.Icons.pause;
+        if (pauseLabel) pauseLabel.innerText = "PAUSE";
+        if (indicator) indicator.classList.remove("paused");
+        if (indicatorText) indicatorText.innerText = "AUTO-PILOT ENGAGED";
+        document.querySelectorAll(".timer-pill").forEach(el => el.classList.remove("paused"));
+    }
+}
+
+async function togglePauseGame() {
+    if (currentState && (currentState.phase === "LOBBY" || currentState.phase === "GAME_OVER")) {
+        return;
+    }
+    isGamePaused = !isGamePaused;
+    updatePauseUi();
+    try {
+        const res = await fetch("/api/toggle_pause", { method: "POST" });
+        if (res.ok) {
+            const data = await res.json();
+            if (typeof data.is_paused === "boolean") {
+                isGamePaused = data.is_paused;
+                updatePauseUi();
+            }
+        }
+    } catch (e) {
+        console.warn("Failed to toggle pause on backend:", e);
+    }
+}
+
 async function advancePhase() {
     clearInterval(countdownInterval);
     clearRevealSequence();
     currentRevealingKey = null;
+    isGamePaused = false;
+    updatePauseUi();
     const phaseAtTrigger = currentState ? currentState.phase : null;
     await fetch("/api/next_phase", {
         method: "POST",
@@ -956,6 +1059,8 @@ async function resetToLobby() {
     clearInterval(countdownInterval);
     clearRevealSequence();
     currentRevealingKey = null;
+    isGamePaused = false;
+    updatePauseUi();
     await fetch("/api/reset", { method: "POST" });
     pollHostState();
 }
@@ -991,11 +1096,20 @@ function launchHostSystem() {
     }
 }
 
-// Pressing Space or Enter engages the title screen
+// Pressing Space or Enter engages the title screen, P toggles pause
 window.addEventListener("keydown", (e) => {
     if (!isHostLaunched && (e.code === "Space" || e.code === "Enter")) {
         e.preventDefault();
         launchHostSystem();
+        return;
+    }
+    // Keyboard shortcut 'P' for Pause / Resume
+    if (isHostLaunched && (e.key === "p" || e.key === "P")) {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : "";
+        if (activeTag !== "input" && activeTag !== "textarea") {
+            e.preventDefault();
+            togglePauseGame();
+        }
     }
 });
 

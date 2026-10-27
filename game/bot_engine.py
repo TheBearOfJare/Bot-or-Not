@@ -105,6 +105,9 @@ class BotEngine:
                     changed = True
                     break
 
+        # Strip leading ellipses, periods, colons, dashes, and whitespace
+        raw = re.sub(r"^[\s.:;–—\-…]+", "", raw).strip()
+
         # If the response contains a question mark followed by an answer (e.g. 'A dinosaur? Dino-snore!'), take the part after '?'
         if "?" in raw and not raw.endswith("?"):
             parts = raw.split("?", 1)
@@ -131,13 +134,15 @@ class BotEngine:
                 trimmed.pop()
             raw = " ".join(trimmed).rstrip(",;:- ")
 
+        # Final strip of quotes, markdown, and any residual leading ellipses/punctuation
+        raw = re.sub(r"^[\s.:;–—\-…]+", "", raw).strip()
         raw = raw.strip("\"'*`# ")
         # Capitalize first letter to match phone keyboard auto-capitalization
         if raw:
             raw = raw[0].upper() + raw[1:]
         return raw
 
-    def query_ollama(self, prompt: str, system_prompt: str = "", image_path: str = None, num_predict: int = 35) -> str:
+    def query_ollama(self, prompt: str, system_prompt: str = "", image_path: str = None, num_predict: int = 35, temperature: float = 0.7, top_k: int = 40) -> str:
         """
         Calls local Ollama with think=False for ultra-fast, sub-second responses.
         Uses moderate temperature and sufficient token headroom (num_predict) to prevent premature cutoffs.
@@ -150,7 +155,8 @@ class BotEngine:
                 "stream": False,
                 "think": False,
                 "options": {
-                    "temperature": 0.7,
+                    "temperature": temperature,
+                    "top_k": top_k,
                     "num_predict": num_predict
                 }
             }
@@ -194,10 +200,11 @@ class BotEngine:
             f"- Write ONLY the punchline / wordplay completion (1 to 7 words).\n"
             f"- Make it a clever pun or joke punchline fitting the prompt.\n"
             f"- Do NOT repeat the setup.\n"
-            f"- Output ONLY the punchline text. No quotes, no explanations, no conversational intro."
+            f"- Output ONLY the punchline text. Do NOT start with ellipses or dots (...).\n"
+            f"- No quotes, no explanations, no conversational intro, and no meta humor."
         )
         sys_prompt = "You are a witty party game player who writes clever punchlines, puns, and jokes."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=35)
+        ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.75, top_k=50)
         if ans:
             cleaned = self.clean_human_response(ans, max_words=10, strip_setup=pun_setup)
             if cleaned:
@@ -217,12 +224,12 @@ class BotEngine:
     def generate_review(self, product_name: str, fallback_answers: list = None) -> str:
         prompt = (
             f"You are a human playing a rapid party game on your phone with 20 seconds to answer.\n"
-            f"Write a quick, blunt 1-star review for: '{product_name}'.\n"
-            f"Write ONE short, casual complaint in 3 to 8 words (e.g. 'Broke immediately', 'Cheap plastic garbage', 'Tasted like dirty tap water').\n"
-            f"Do not write paragraphs, just sound like an annoyed person typing fast on a phone. No quotes."
+            f"Write a 1-star customer review for: '{product_name}'.\n"
+            f"Write ONE short, funny complaint (3 to 10 words) about a specific annoying flaw, awkward situation, or ironic downside of this exact product.\n"
+            f"Be creative and relatable (do NOT just say 'it broke' or 'cheap plastic'). Sound like an annoyed customer typing fast on a phone. No quotes."
         )
-        sys_prompt = "You type quick, blunt 3-8 word 1-star complaints on a phone keyboard."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=35)
+        sys_prompt = "You type quick, witty, and blunt 1-star customer complaints on a phone keyboard."
+        ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.8, top_k=60)
         if ans:
             cleaned = self.clean_human_response(ans, max_words=11, strip_setup=product_name)
             if cleaned:
@@ -245,12 +252,12 @@ class BotEngine:
             f"Question: '{survey_prompt}'\n\n"
             f"Rules:\n"
             f"- Give exactly 3 answers separated by commas.\n"
-            f"- Pay close attention to what the question asks (e.g. if it asks for bad things, useless things, or embarrassing things, your answers must match that!).\n"
+            f"- Pay close attention to what the question asks (e.g. if it asks for bad things, useful things, or embarrassing things, your answers must match that!).\n"
             f"- Keep each answer very short (1 to 4 words).\n"
             f"- Output ONLY the 3 answers separated by commas. No numbering, no extra text."
         )
         sys_prompt = "You are a party game player answering survey questions with 3 concise answers separated by commas."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=45)
+        ans = self.query_ollama(prompt, sys_prompt, num_predict=45, temperature=0.75, top_k=50)
         if ans:
             parts = [self.clean_human_response(p, max_words=5, strip_final_period=True) for p in ans.split(",") if p.strip()]
             parts = [p for p in parts if p]
@@ -331,7 +338,7 @@ class BotEngine:
         prompt = (
             "Look at the attached image. You are playing a rapid party game on your phone with 20 seconds on the clock.\n"
             "Quickly name what you see in 3 to 8 words (e.g. 'cat riding on top of a red car', 'cyberpunk landscape at night', or 'man holding a giant pizza').\n"
-            "Keep it casual, direct, and simple. If you're unsure, give it an artistic name eg. 'parking lot sunset'. Do not write a paragraph, do not say it is blurry."
+            "Keep it casual, direct, and simple. If you're unsure, give it an artistic name eg. 'parking lot sunset' or something sarcastic eg. 'the mitochondria is the powerhouse of the cell'. Do not write a paragraph, do not say it is blurry."
         )
         sys_prompt = "You type quick, direct 3-8 word descriptions of what you see in photos for a party game."
         ans = self.query_ollama(prompt, sys_prompt, image_path=image_path, num_predict=35)

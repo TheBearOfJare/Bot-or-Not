@@ -171,6 +171,11 @@ def api_reset():
     game_manager.reset_to_lobby(clear_players=clear_players)
     return jsonify({"success": True, "state": game_manager.get_host_state()})
 
+@app.route("/api/toggle_pause", methods=["POST"])
+def api_toggle_pause():
+    is_paused = game_manager.toggle_pause()
+    return jsonify({"success": True, "is_paused": is_paused, "state": game_manager.get_host_state()})
+
 if __name__ == "__main__":
     import threading
     threading.Thread(target=game_manager.bot_engine.prewarm, daemon=True).start()

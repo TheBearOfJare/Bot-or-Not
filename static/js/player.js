@@ -13,6 +13,7 @@ let lastStateCached = null;
 // Timers and multi-select state
 let playerCountdown = null;
 let playerCountdownSeconds = 25;
+let isMobilePaused = false;
 let currentPhaseCached = null;
 let currentRoundCached = null;
 let selectedVoteIds = [];
@@ -183,6 +184,13 @@ async function pollPlayerState() {
 }
 
 function renderPlayerView(state) {
+    isMobilePaused = Boolean(state.is_paused);
+    if (isMobilePaused) {
+        document.querySelectorAll(".timer-pill").forEach(el => el.classList.add("paused"));
+    } else {
+        document.querySelectorAll(".timer-pill").forEach(el => el.classList.remove("paused"));
+    }
+
     // Update player header badge with secret score visible to player
     if (state.player) {
         document.getElementById("player-status-bar").style.display = "block";
@@ -398,22 +406,104 @@ function flushDraftNow() {
     }
 }
 
+function normalizeAnswer(text) {
+    if (!text || typeof text !== "string") return "";
+    let clean = text.trim();
+    // Strip surrounding quotes, backticks, markdown
+    clean = clean.replace(/^["'`*#~]+|["'`*#~]+$/g, "").trim();
+    // Strip any residual leading ellipses, bullets, colons, or dashes
+    clean = clean.replace(/^[\s.:;–—\-…•]+/, "").trim();
+    // Collapse internal newlines or tabs to a single space
+    clean = clean.replace(/[\r\n\t]+/g, " ").replace(/\s{2,}/g, " ").trim();
+    // Strip trailing punctuation: , ; : - and trailing period
+    clean = clean.replace(/[,;:\-\s]+$/, "");
+    if (clean.endsWith(".")) {
+        clean = clean.slice(0, -1).trim();
+    }
+    // Capitalize letter after sentence terminator (.!?)
+    clean = clean.replace(/([.!?]\s+)([a-z])/g, (m, p1, p2) => p1 + p2.toUpperCase());
+    // Capitalize first character
+    if (clean.length > 0) {
+        clean = clean.charAt(0).toUpperCase() + clean.slice(1);
+    }
+    return clean;
+}
+
+function handleResponseFormSubmit(e) {
+    if (e) e.preventDefault();
+    if (e && e.submitter && e.submitter.id === "btn-submit-answer") {
+        submitAnswer();
+        return;
+    }
+    if (currentPromptType === "multi_field") {
+        const s1 = document.getElementById("survey-input-1");
+        const s2 = document.getElementById("survey-input-2");
+        const s3 = document.getElementById("survey-input-3");
+        if (document.activeElement === s1) {
+            if (s2) s2.focus();
+            return;
+        }
+        if (document.activeElement === s2) {
+            if (s3) s3.focus();
+            return;
+        }
+    }
+    submitAnswer();
+}
+
 function initInputListeners() {
     const singleInput = document.getElementById("single-response-input");
     if (singleInput) {
         singleInput.addEventListener("input", onTextInputUpdate);
         singleInput.addEventListener("change", onTextInputUpdate);
         singleInput.addEventListener("blur", flushDraftNow);
+        singleInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                submitAnswer();
+            }
+        });
     }
 
-    ["survey-input-1", "survey-input-2", "survey-input-3"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.addEventListener("input", onTextInputUpdate);
-            el.addEventListener("change", onTextInputUpdate);
-            el.addEventListener("blur", flushDraftNow);
-        }
-    });
+    const s1 = document.getElementById("survey-input-1");
+    const s2 = document.getElementById("survey-input-2");
+    const s3 = document.getElementById("survey-input-3");
+
+    if (s1) {
+        s1.addEventListener("input", onTextInputUpdate);
+        s1.addEventListener("change", onTextInputUpdate);
+        s1.addEventListener("blur", flushDraftNow);
+        s1.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                if (s2) s2.focus();
+            }
+        });
+    }
+
+    if (s2) {
+        s2.addEventListener("input", onTextInputUpdate);
+        s2.addEventListener("change", onTextInputUpdate);
+        s2.addEventListener("blur", flushDraftNow);
+        s2.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                if (s3) s3.focus();
+            }
+        });
+    }
+
+    if (s3) {
+        s3.addEventListener("input", onTextInputUpdate);
+        s3.addEventListener("change", onTextInputUpdate);
+        s3.addEventListener("blur", flushDraftNow);
+        s3.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                submitAnswer();
+            }
+        });
+    }
 
     document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "hidden") {
@@ -530,21 +620,29 @@ async function submitAnswer(isAutoTimeout = false) {
 
     let payload = null;
     if (currentPromptType === "multi_field") {
-        const a1 = document.getElementById("survey-input-1").value.trim();
-        const a2 = document.getElementById("survey-input-2").value.trim();
-        const a3 = document.getElementById("survey-input-3").value.trim();
+        const el1 = document.getElementById("survey-input-1");
+        const el2 = document.getElementById("survey-input-2");
+        const el3 = document.getElementById("survey-input-3");
+        const a1 = normalizeAnswer(el1 ? el1.value : "");
+        const a2 = normalizeAnswer(el2 ? el2.value : "");
+        const a3 = normalizeAnswer(el3 ? el3.value : "");
         if (!a1 && !a2 && !a3 && !isAutoTimeout) {
             alert("Please enter at least one answer!");
             return;
         }
         payload = [a1 || "Answer 1", a2 || "Answer 2", a3 || "Answer 3"];
+        if (el1 && a1) el1.value = a1;
+        if (el2 && a2) el2.value = a2;
+        if (el3 && a3) el3.value = a3;
     } else {
-        const val = document.getElementById("single-response-input").value.trim();
+        const elSingle = document.getElementById("single-response-input");
+        const val = normalizeAnswer(elSingle ? elSingle.value : "");
         if (!val && !isAutoTimeout) {
             alert("Please write a response!");
             return;
         }
         payload = val || "[No response submitted]";
+        if (elSingle && val) elSingle.value = val;
     }
 
     clearInterval(playerCountdown);
@@ -593,13 +691,24 @@ function renderVotingScreen(state, isVoteChanged) {
     const stepTag = document.getElementById("player-voting-step-tag");
     if (stepTag) stepTag.innerText = `Voting Set ${currVoteNum} of ${totalQ}`;
 
+    const isCaptcha = (state.game_id === "captcha" || Boolean(state.image_url) || (state.prompt_data && state.prompt_data.image_url));
     const reminderEl = document.getElementById("player-voting-prompt-reminder");
     if (reminderEl) {
-        const pText = state.prompt_text ? `Prompt: ${state.prompt_text}` : "";
-        reminderEl.style.display = state.prompt_text ? "block" : "none";
-        if (pText && (isVoteChanged || reminderEl.getAttribute("data-typed-text") !== pText)) {
-            reminderEl.setAttribute("data-typed-text", pText);
-            typeTerminalText(reminderEl, `>> PROMPT: ${pText}`, { speed: 14, cursor: true });
+        if (isCaptcha) {
+            reminderEl.style.display = "none";
+            reminderEl.textContent = "";
+            reminderEl.removeAttribute("data-typed-text");
+            if (reminderEl._termTimer) {
+                clearTimeout(reminderEl._termTimer);
+                reminderEl._termTimer = null;
+            }
+        } else {
+            const pText = state.prompt_text ? `Prompt: ${state.prompt_text}` : "";
+            reminderEl.style.display = state.prompt_text ? "block" : "none";
+            if (pText && (isVoteChanged || reminderEl.getAttribute("data-typed-text") !== pText)) {
+                reminderEl.setAttribute("data-typed-text", pText);
+                typeTerminalText(reminderEl, `>> PROMPT: ${pText}`, { speed: 14, cursor: true });
+            }
         }
     }
 
@@ -908,6 +1017,9 @@ function startMobileTimer(seconds, elementId, timeoutCallback) {
     if (el) el.innerText = playerCountdownSeconds;
 
     playerCountdown = setInterval(() => {
+        if (isMobilePaused) {
+            return;
+        }
         playerCountdownSeconds -= 1;
         if (el) el.innerText = Math.max(0, playerCountdownSeconds);
         if (playerCountdownSeconds <= 0) {

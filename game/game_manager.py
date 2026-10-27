@@ -38,11 +38,15 @@ class GameManager:
         # Ranking changes and secret scores
         self.last_round_rankings: List[Dict[str, Any]] = []
         self.player_round_scores: Dict[str, Dict[str, Any]] = {}
+        
+        # Pause status
+        self.is_paused: bool = False
 
     def reset_to_lobby(self, clear_players: bool = False):
         """Reset game state back to lobby."""
         with self.lock:
             self.phase = "LOBBY"
+            self.is_paused = False
             self.current_sequence_index = -1
             self.current_game = None
             self.round_number = 0
@@ -112,6 +116,7 @@ class GameManager:
 
             self.current_sequence_index = 0
             self.round_number = 1
+            self.is_paused = False
             self.last_round_rankings.clear()
             self.player_round_scores.clear()
             self._load_current_game()
@@ -160,6 +165,13 @@ class GameManager:
             "If anyone thinks your response was AI generated, you'll lose points. Got it? Let's begin."
         )
 
+    def toggle_pause(self) -> bool:
+        """Toggles the game pause state."""
+        with self.lock:
+            self.is_paused = not self.is_paused
+            print(f"[GameManager] Pause toggled: is_paused={self.is_paused}")
+            return self.is_paused
+
     def next_phase(self, expected_phase: Optional[str] = None) -> bool:
         """
         Advances game state machine to the next natural phase or sub-step.
@@ -172,6 +184,7 @@ class GameManager:
 
             now = time.time()
             self.phase_start_time = now
+            self.is_paused = False
 
             if self.phase == "LOBBY":
                 return self.start_game()
@@ -430,7 +443,7 @@ class GameManager:
             )
             
             # Auto-advance if all human players submitted AND locked in for THIS prompt
-            if ok and is_locked and self.current_game.are_submissions_complete(list(self.players.keys()), question_index=curr_idx):
+            if ok and is_locked and not self.is_paused and self.current_game.are_submissions_complete(list(self.players.keys()), question_index=curr_idx):
                 self.next_phase(expected_phase="SUBMITTING")
             return ok
 
@@ -446,7 +459,7 @@ class GameManager:
             ok = self.current_game.submit_vote(player_id, target_option_ids, question_index=curr_idx)
             
             # Auto-advance if all human players voted for THIS set
-            if ok and self.current_game.are_votes_complete(list(self.players.keys()), question_index=curr_idx):
+            if ok and not self.is_paused and self.current_game.are_votes_complete(list(self.players.keys()), question_index=curr_idx):
                 self.next_phase(expected_phase="VOTING")
             return ok
 
@@ -457,7 +470,7 @@ class GameManager:
             ok = self.current_game.submit_guesses(player_id, guesses)
             
             # Auto-advance if all human players guessed
-            if ok and self.current_game.are_votes_complete(list(self.players.keys())):
+            if ok and not self.is_paused and self.current_game.are_votes_complete(list(self.players.keys())):
                 self.next_phase(expected_phase="BONUS")
             return ok
 
@@ -497,6 +510,7 @@ class GameManager:
 
         base_state = {
             "phase": self.phase,
+            "is_paused": self.is_paused,
             "round_number": self.round_number,
             "total_rounds": len(self.game_sequence),
             "questions_per_minigame": self.questions_per_minigame,
@@ -629,6 +643,7 @@ class GameManager:
 
         state = {
             "phase": self.phase,
+            "is_paused": self.is_paused,
             "game_id": self.current_game.game_id if self.current_game else "",
             "player": {
                 "id": player["id"],

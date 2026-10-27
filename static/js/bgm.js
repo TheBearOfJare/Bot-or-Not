@@ -554,19 +554,22 @@ class BGMManager {
         const pct = Math.round(this.volume * 100);
 
         if (!this.isStarted) {
-            if (iconEl) iconEl.innerText = "🔇";
+            if (iconEl) iconEl.innerHTML = window.Icons ? window.Icons.volumeMute : "";
             if (labelEl) labelEl.innerText = "AUDIO STANDBY";
             if (btn) btn.classList.add("btn-muted");
             return;
         }
 
         if (this.isMuted || pct === 0) {
-            if (iconEl) iconEl.innerText = "🔇";
+            if (iconEl) iconEl.innerHTML = window.Icons ? window.Icons.volumeMute : "";
             if (labelEl) labelEl.innerText = "BGM: MUTED";
             if (btn) btn.classList.add("btn-muted");
         } else {
-            const icon = pct > 60 ? "🔊" : (pct > 25 ? "🔉" : "🔈");
-            if (iconEl) iconEl.innerText = icon;
+            let iconSvg = "";
+            if (window.Icons) {
+                iconSvg = pct > 60 ? window.Icons.volumeHigh : (pct > 25 ? window.Icons.volumeMedium : window.Icons.volumeLow);
+            }
+            if (iconEl) iconEl.innerHTML = iconSvg;
             if (labelEl) labelEl.innerText = `BGM: ${pct}%`;
             if (btn) btn.classList.remove("btn-muted");
         }

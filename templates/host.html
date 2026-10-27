@@ -137,7 +137,8 @@
                 <span id="submitting-game-title" style="font-weight: 700; color: var(--text-secondary); margin-left: 4px;"></span>
             </div>
             <div class="timer-pill" id="host-submitting-timer-box">
-                ⏱️ <span id="submitting-timer">30</span>s
+                <span class="btn-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
+                <span id="submitting-timer">30</span>s
             </div>
         </div>
 
@@ -163,7 +164,8 @@
                 <span id="voting-game-title" style="font-weight: 700; color: var(--text-secondary); margin-left: 4px;"></span>
             </div>
             <div class="timer-pill" id="host-voting-timer-box">
-                ⏱️ <span id="voting-timer">25</span>s
+                <span class="btn-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
+                <span id="voting-timer">25</span>s
             </div>
         </div>
         <h2 style="font-size: 1.8rem; text-align: center; margin-bottom: 6px;" id="voting-header-title">&gt; WHICH RESPONSE IS THE BOT?</h2>
@@ -192,7 +194,8 @@
                 <span class="tag tag-step" id="reveal-question-tag">Question 1 of 3</span>
             </div>
             <div class="timer-pill" id="host-reveal-timer-box">
-                ⏱️ <span id="reveal-timer">10</span>s
+                <span class="btn-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
+                <span id="reveal-timer">10</span>s
             </div>
         </div>
         <h2 style="font-size: 2rem; text-align: center; margin-bottom: 4px;">&gt; REVEAL SEQUENCE // TURING AUDIT</h2>
@@ -285,19 +288,49 @@
 
 <!-- Subtle host control bar at bottom -->
 <div class="host-controls" id="host-controls-bar">
-    <span id="auto-pilot-indicator" style="align-self: center; font-size: 0.82rem; color: var(--terminal-green); margin-right: auto; letter-spacing: 0.08em;">
-        [● AUTO-PILOT ENGAGED]
-    </span>
-    <div id="host-audio-controls" style="display: flex; align-items: center; gap: 8px; margin-right: 12px;">
-        <button class="btn btn-secondary btn-sm" id="btn-audio-toggle" onclick="toggleBgmAudio()" title="Cycle BGM volume / mute">
-            <span id="bgm-icon">🔊</span> <span id="bgm-label">BGM: 70%</span>
+    <div id="auto-pilot-indicator" class="auto-pilot-badge">
+        <span class="auto-pilot-dot"></span>
+        <span id="auto-pilot-text">AUTO-PILOT ENGAGED</span>
+    </div>
+    <div id="host-audio-controls" style="display: flex; align-items: center; gap: 8px; margin-right: 8px;">
+        <button class="btn btn-secondary btn-sm host-ctrl-btn" id="btn-audio-toggle" onclick="toggleBgmAudio()" title="Cycle BGM volume / mute">
+            <span id="bgm-icon" class="btn-icon">
+                <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="currentColor"></polygon>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                    <path d="M22 2a14 14 0 0 1 0 20"></path>
+                </svg>
+            </span>
+            <span id="bgm-label">BGM: 70%</span>
         </button>
     </div>
-    <button class="btn btn-secondary btn-sm" onclick="advancePhase()" id="btn-skip-phase">
-        [ ⏩ SKIP TIMER ]
+    <button class="btn btn-secondary btn-sm host-ctrl-btn" onclick="togglePauseGame()" id="btn-pause-game" title="Pause or Resume game countdown timer [Key: P]">
+        <span id="pause-icon" class="btn-icon">
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+                <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+            </svg>
+        </span>
+        <span id="pause-label">PAUSE</span>
     </button>
-    <button class="btn btn-secondary btn-sm" onclick="resetToLobby()" id="btn-reset-lobby">
-        [ ↺ RESET LOBBY ]
+    <button class="btn btn-secondary btn-sm host-ctrl-btn" onclick="advancePhase()" id="btn-skip-phase" title="Skip current countdown">
+        <span id="skip-icon" class="btn-icon">
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 4 15 12 5 20 5 4" fill="currentColor"></polygon>
+                <line x1="19" y1="5" x2="19" y2="19" stroke-width="2.5"></line>
+            </svg>
+        </span>
+        <span>SKIP TIMER</span>
+    </button>
+    <button class="btn btn-secondary btn-sm host-ctrl-btn" onclick="resetToLobby()" id="btn-reset-lobby" title="Reset game back to lobby">
+        <span id="reset-icon" class="btn-icon">
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10"></polyline>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+            </svg>
+        </span>
+        <span>RESET LOBBY</span>
     </button>
 </div>
 {% endblock %}

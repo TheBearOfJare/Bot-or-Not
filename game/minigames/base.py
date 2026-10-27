@@ -2,6 +2,7 @@ import threading
 import uuid
 import random
 from typing import Dict, Any, List, Union, Optional
+from game.normalization import normalize_response
 
 class BaseMinigame:
     def __init__(self, game_id: str, title: str, instruction: str, bot_engine, bot_count: int = 1, questions_count: int = 3):
@@ -181,12 +182,17 @@ class BaseMinigame:
                 if version and existing.get("version", 0) > version:
                     return False
 
+            final_response = response_text
+            if is_locked:
+                setup = q.get("meta", {}).get("setup", "") or q.get("meta", {}).get("product", "") or ""
+                final_response = normalize_response(response_text, strip_setup=setup)
+
             q["submissions"][submission_id] = {
                 "id": submission_id,
                 "author_id": player_id,
                 "author_name": player_name,
                 "is_bot": False,
-                "response": response_text,
+                "response": final_response,
                 "is_locked": is_locked,
                 "version": version
             }
@@ -217,6 +223,7 @@ class BaseMinigame:
             if not (0 <= idx < len(self.questions)):
                 return
             q = self.questions[idx]
+            setup = q.get("meta", {}).get("setup", "") or q.get("meta", {}).get("product", "") or ""
             for pid, p in players.items():
                 sub_id = f"sub_{pid}"
                 sub = q["submissions"].get(sub_id)
@@ -233,9 +240,10 @@ class BaseMinigame:
                 elif not sub.get("is_locked", False):
                     resp = sub.get("response", "")
                     if isinstance(resp, str) and resp.strip():
-                        sub["response"] = resp.strip()
+                        sub["response"] = normalize_response(resp.strip(), strip_setup=setup)
                         sub["is_locked"] = True
                     elif isinstance(resp, list) and any(str(x).strip() for x in resp):
+                        sub["response"] = normalize_response(resp, strip_setup=setup)
                         sub["is_locked"] = True
                     else:
                         sub["response"] = "[Out of time - Blank submission]"

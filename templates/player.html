@@ -20,7 +20,7 @@
         <h3>&gt; AUTHENTICATE AGENT</h3>
         <p class="subtitle">// Enter agent callsign to join current session:</p>
         <form id="join-form" onsubmit="handleJoin(event)">
-            <input type="text" id="player-name-input" placeholder="Callsign / Nickname" maxlength="18" required autofocus>
+            <input type="text" id="player-name-input" name="player_name" placeholder="Callsign / Nickname" maxlength="18" required autofocus autocapitalize="words" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="go">
             <button type="submit" class="btn btn-primary" id="btn-join">[ &gt; AUTHENTICATE &amp; ENTER ]</button>
         </form>
     </div>
@@ -56,7 +56,8 @@
                     <h3 id="prompt-heading" style="color: var(--accent); font-size: 1.15rem; margin: 0;">Prompt</h3>
                 </div>
                 <div class="timer-pill" id="player-submit-timer" style="padding: 2px 10px; font-size: 0.95rem;">
-                    ⏱️ <span id="player-submit-seconds">30</span>s
+                    <span class="btn-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
+                    <span id="player-submit-seconds">30</span>s
                 </div>
             </div>
             
@@ -64,21 +65,23 @@
                 <img id="player-captcha-img" src="" alt="CAPTCHA Image" style="max-width: 100%;">
             </div>
 
-            <!-- Single text input form -->
-            <div id="input-single-container" style="margin-top: 14px;">
-                <textarea id="single-response-input" rows="3" placeholder=">> Type response here..."></textarea>
-            </div>
+            <form id="submitting-form" onsubmit="handleResponseFormSubmit(event)">
+                <!-- Single text input form -->
+                <div id="input-single-container" style="margin-top: 14px;">
+                    <textarea id="single-response-input" name="single_response" rows="3" placeholder=">> Type response here..." maxlength="140" autocapitalize="sentences" autocorrect="on" autocomplete="off" spellcheck="true" enterkeyhint="send"></textarea>
+                </div>
 
-            <!-- 3-field input for Survey Says -->
-            <div id="input-multi-container" style="display: none; margin-top: 14px;">
-                <input type="text" id="survey-input-1" placeholder=">> Top Answer #1">
-                <input type="text" id="survey-input-2" placeholder=">> Top Answer #2">
-                <input type="text" id="survey-input-3" placeholder=">> Top Answer #3">
-            </div>
+                <!-- 3-field input for Survey Says -->
+                <div id="input-multi-container" style="display: none; margin-top: 14px;">
+                    <input type="text" id="survey-input-1" name="survey_answer_1" placeholder=">> Top Answer #1" maxlength="60" autocapitalize="sentences" autocorrect="on" autocomplete="off" spellcheck="true" enterkeyhint="next">
+                    <input type="text" id="survey-input-2" name="survey_answer_2" placeholder=">> Top Answer #2" maxlength="60" autocapitalize="sentences" autocorrect="on" autocomplete="off" spellcheck="true" enterkeyhint="next">
+                    <input type="text" id="survey-input-3" name="survey_answer_3" placeholder=">> Top Answer #3" maxlength="60" autocapitalize="sentences" autocorrect="on" autocomplete="off" spellcheck="true" enterkeyhint="send">
+                </div>
 
-            <button class="btn btn-success" id="btn-submit-answer" onclick="submitAnswer()">
-                [ LOCK IN RESPONSE ]
-            </button>
+                <button type="submit" class="btn btn-success" id="btn-submit-answer">
+                    [ LOCK IN RESPONSE ]
+                </button>
+            </form>
         </div>
 
         <!-- If already submitted -->
@@ -99,7 +102,8 @@
                     <h3 style="color: var(--terminal-red); font-size: 1.15rem; margin: 0;" id="player-voting-title">&gt; IDENTIFY BOT</h3>
                 </div>
                 <div class="timer-pill" id="player-vote-timer" style="padding: 2px 10px; font-size: 0.95rem;">
-                    ⏱️ <span id="player-vote-seconds">25</span>s
+                    <span class="btn-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
+                    <span id="player-vote-seconds">25</span>s
                 </div>
             </div>
 
@@ -137,7 +141,7 @@
     <div id="screen-watch-tv" class="card" style="display: none; text-align: center;">
         <!-- Confidential Player Score Summary (Secret from Host TV) -->
         <div id="player-score-report" style="display: none; margin-bottom: 20px;">
-            <span class="tag tag-secret" style="margin-bottom: 12px;">🤫 CONFIDENTIAL AGENT SCORE</span>
+            <span class="tag tag-secret" style="margin-bottom: 12px;">CONFIDENTIAL AGENT SCORE</span>
             
             <div class="player-secret-score-box">
                 <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px;">ROUND DELTA</div>
@@ -164,7 +168,9 @@
             </p>
         </div>
 
-        <div style="font-size: 2.2rem; margin-bottom: 8px;">📡</div>
+        <div style="margin-bottom: 8px; color: var(--accent);">
+            <svg class="ui-icon" style="width: 32px; height: 32px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a10 10 0 0 1 10 10"></path><path d="M12 6a6 6 0 0 1 6 6"></path><circle cx="12" cy="12" r="2" fill="currentColor"></circle></svg>
+        </div>
         <h3 id="watch-tv-title">&gt; SURVEILLANCE FEED</h3>
         <p id="watch-tv-desc" style="margin-top: 4px; color: var(--text-secondary); font-size: 0.95rem;">// Real-time evaluation results executing on host display.</p>
         <div id="player-round-score-notice" style="margin-top: 12px; font-weight: 700; color: var(--terminal-green);"></div>

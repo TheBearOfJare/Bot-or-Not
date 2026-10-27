@@ -3,6 +3,7 @@ import json
 import random
 from typing import Any, Dict, List, Optional
 from game.minigames.base import BaseMinigame
+from game.normalization import normalize_response
 
 PROMPTS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "prompts", "survey.json"))
 
@@ -140,9 +141,9 @@ class SurveySaysGame(BaseMinigame):
 
             if is_locked:
                 if isinstance(response_data, list):
-                    cleaned = [str(x).strip() for x in response_data if str(x).strip()]
+                    cleaned = [normalize_response(str(x)) for x in response_data if str(x).strip()]
                 elif isinstance(response_data, str):
-                    cleaned = [x.strip() for x in response_data.split("\n") if x.strip()]
+                    cleaned = [normalize_response(x) for x in response_data.split("\n") if x.strip()]
                 else:
                     cleaned = ["Response 1", "Response 2", "Response 3"]
 
@@ -183,7 +184,7 @@ class SurveySaysGame(BaseMinigame):
                 sub_id = f"sub_{pid}"
                 sub = q["submissions"].get(sub_id)
                 if not sub:
-                    fallbacks = self._get_fallback_response_for_question(q)
+                    fallbacks = [normalize_response(x) for x in self._get_fallback_response_for_question(q)]
                     q["submissions"][sub_id] = {
                         "id": sub_id,
                         "author_id": pid,
@@ -195,12 +196,12 @@ class SurveySaysGame(BaseMinigame):
                     }
                 elif not sub.get("is_locked", False):
                     resp = sub.get("response", [])
-                    cleaned = [str(x).strip() for x in resp if str(x).strip()] if isinstance(resp, list) else []
+                    cleaned = [normalize_response(str(x)) for x in resp if str(x).strip()] if isinstance(resp, list) else []
                     if cleaned:
                         while len(cleaned) < 3:
                             cleaned.append(f"Answer {len(cleaned)+1}")
                         sub["response"] = cleaned[:3]
                         sub["is_locked"] = True
                     else:
-                        sub["response"] = self._get_fallback_response_for_question(q)
+                        sub["response"] = [normalize_response(x) for x in self._get_fallback_response_for_question(q)]
                         sub["is_locked"] = True
