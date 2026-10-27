@@ -8,9 +8,10 @@ from PIL import Image
 from config import Config
 
 class BotEngine:
-    def __init__(self, ollama_url: str = None, model: str = None):
+    def __init__(self, ollama_url: str = None, model: str = None, vision_model: str = None):
         self.ollama_url = ollama_url or Config.OLLAMA_URL
         self.model = model or Config.OLLAMA_MODEL
+        self.vision_model = vision_model or getattr(Config, "OLLAMA_VISION_MODEL", self.model)
         self.timeout = Config.OLLAMA_TIMEOUT
 
     def get_bot_display_name(self) -> str:
@@ -18,7 +19,7 @@ class BotEngine:
         return "Bot"
 
     def prewarm(self):
-        """Pre-warm Ollama model in background so first game request doesn't suffer cold-start."""
+        """Pre-warm primary Ollama model in background so first game request doesn't suffer cold-start."""
         try:
             payload = {
                 "model": self.model,
@@ -27,10 +28,10 @@ class BotEngine:
                 "think": False,
                 "options": {"num_predict": 1}
             }
-            requests.post(f"{self.ollama_url}/api/generate", json=payload, timeout=5)
+            requests.post(f"{self.ollama_url}/api/generate", json=payload, timeout=self.timeout)
             print(f"[BotEngine] Ollama model '{self.model}' pre-warmed and ready.")
         except Exception as e:
-            print(f"[BotEngine] Ollama pre-warm note: {e} (will use fallbacks if Ollama is offline)")
+            print(f"[BotEngine] Ollama pre-warm note ({self.model}): {e}")
 
     def clean_human_response(self, text: str, max_words: int = 12, strip_setup: str = "", strip_final_period: bool = True) -> str:
         """
@@ -142,14 +143,16 @@ class BotEngine:
             raw = raw[0].upper() + raw[1:]
         return raw
 
-    def query_ollama(self, prompt: str, system_prompt: str = "", image_path: str = None, num_predict: int = 35, temperature: float = 0.7, top_k: int = 40) -> str:
+    def query_ollama(self, prompt: str, system_prompt: str = "", image_path: str = None, num_predict: int = 35, temperature: float = 0.7, top_k: int = 40, model_override: str = None) -> str:
         """
         Calls local Ollama with think=False for ultra-fast, sub-second responses.
         Uses moderate temperature and sufficient token headroom (num_predict) to prevent premature cutoffs.
+        Automatically routes image inputs to vision_model.
         """
         try:
+            target_model = model_override or (self.vision_model if image_path else self.model)
             payload = {
-                "model": self.model,
+                "model": target_model,
                 "prompt": prompt,
                 "system": system_prompt or "You are a human playing a fast party game on your phone with friends under a 30-second timer. You type quick, short, casual, and possibly humorous responses.",
                 "stream": False,
@@ -192,7 +195,50 @@ class BotEngine:
             return None
         return None
 
-    def generate_pun_punchline(self, pun_setup: str, fallback_answers: list = None) -> str:
+    def select_best_candidate(self, prompt_context: str, candidates: list, game_type: str = "joke") -> str:
+        """
+        Runs a rapid single-token judge call to pick the funniest, cleverest candidate out of N options.
+        Falls back to the first candidate if selection fails.
+        """
+        if not candidates:
+            return ""
+        if len(candidates) == 1:
+            return candidates[0]
+
+        options_text = "\n".join(f"{i+1}. {c}" for i, c in enumerate(candidates))
+        if game_type == "pun":
+            criteria = "Which punchline is the funniest, most clever, and best fitting for a party game?"
+        elif game_type == "review":
+            criteria = "Which 1-star review is the funniest, most relatable, and most creative complaint?"
+        else:
+            criteria = "Which response is the funniest and cleverest?"
+
+        judge_prompt = (
+            f"Party game prompt: '{prompt_context}'\n\n"
+            f"Candidate answers:\n"
+            f"{options_text}\n\n"
+            f"{criteria}\n"
+            f"Output ONLY the single digit of the winner (e.g. 1, 2, or 3). Do not write any other text."
+        )
+        sys_prompt = "You are an expert comedy judge picking the funniest and cleverest party game response."
+
+        judge_res = self.query_ollama(
+            judge_prompt,
+            system_prompt=sys_prompt,
+            num_predict=5,
+            temperature=0.1,
+            top_k=10
+        )
+        if judge_res:
+            digits = re.findall(r"\b([1-9])\b", judge_res)
+            if digits:
+                chosen_idx = int(digits[0]) - 1
+                if 0 <= chosen_idx < len(candidates):
+                    return candidates[chosen_idx]
+
+        return candidates[0]
+
+    def generate_pun_punchline(self, pun_setup: str, fallback_answers: list = None, num_candidates: int = 3) -> str:
         prompt = (
             f"You are playing a party game where you complete a pun or joke with a funny punchline.\n"
             f"Prompt: {pun_setup}\n\n"
@@ -204,11 +250,20 @@ class BotEngine:
             f"- No quotes, no explanations, no conversational intro, and no meta humor."
         )
         sys_prompt = "You are a witty party game player who writes clever punchlines, puns, and jokes."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.70, top_k=50)
-        if ans:
-            cleaned = self.clean_human_response(ans, max_words=10, strip_setup=pun_setup)
-            if cleaned:
-                return cleaned
+        
+        candidates = []
+        for _ in range(num_candidates):
+            ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.85, top_k=50)
+            if ans:
+                cleaned = self.clean_human_response(ans, max_words=10, strip_setup=pun_setup)
+                if cleaned and cleaned not in candidates:
+                    candidates.append(cleaned)
+
+        if candidates:
+            if len(candidates) > 1:
+                return self.select_best_candidate(pun_setup, candidates, game_type="pun")
+            return candidates[0]
+
         if fallback_answers:
             chosen = random.choice(fallback_answers)
             return chosen[0].upper() + chosen[1:] if chosen else ""
@@ -221,7 +276,7 @@ class BotEngine:
             "Ask again later"
         ])
 
-    def generate_review(self, product_name: str, fallback_answers: list = None) -> str:
+    def generate_review(self, product_name: str, fallback_answers: list = None, num_candidates: int = 3) -> str:
         prompt = (
             f"You are a human playing a rapid party game on your phone with 20 seconds to answer.\n"
             f"Write a 1-star customer review for: '{product_name}'.\n"
@@ -229,11 +284,20 @@ class BotEngine:
             f"Be creative and relatable (do NOT just say 'it broke' or 'cheap plastic'). Sound like an annoyed customer typing fast on a phone. No quotes."
         )
         sys_prompt = "You type brief, specific, and clear 1-star customer complaints on a phone keyboard."
-        ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.70, top_k=50)
-        if ans:
-            cleaned = self.clean_human_response(ans, max_words=11, strip_setup=product_name)
-            if cleaned:
-                return cleaned
+
+        candidates = []
+        for _ in range(num_candidates):
+            ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.85, top_k=60)
+            if ans:
+                cleaned = self.clean_human_response(ans, max_words=11, strip_setup=product_name)
+                if cleaned and cleaned not in candidates:
+                    candidates.append(cleaned)
+
+        if candidates:
+            if len(candidates) > 1:
+                return self.select_best_candidate(product_name, candidates, game_type="review")
+            return candidates[0]
+
         if fallback_answers:
             chosen = random.choice(fallback_answers)
             return chosen[0].upper() + chosen[1:] if chosen else ""

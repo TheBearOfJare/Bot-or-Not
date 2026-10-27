@@ -469,9 +469,10 @@ function renderVoting(state, isNewVote) {
     if (state.voting_options) {
         optionsGrid.innerHTML = state.voting_options.map((opt, i) => {
             const letter = String.fromCharCode(65 + i);
+            const isSystemPlaceholder = typeof opt.response === "string" && opt.response.startsWith("[") && opt.response.endsWith("]");
             const content = Array.isArray(opt.response) 
                 ? `<ol style="margin-left: 20px;">${opt.response.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ol>`
-                : `"${escapeHtml(opt.response)}"`;
+                : (isSystemPlaceholder ? `<span style="opacity: 0.7; font-style: italic;">${escapeHtml(opt.response)}</span>` : `"${escapeHtml(opt.response)}"`);
 
             return `
                 <div class="option-card">
@@ -726,9 +727,10 @@ function displayRevealCardStep(container, card, cardIndex) {
     const voteCount = card.vote_count || 0;
     const voters = card.voter_names || [];
 
+    const isSystemPlaceholder = typeof card.response === "string" && card.response.startsWith("[") && card.response.endsWith("]");
     const content = Array.isArray(card.response) 
         ? `<ol style="margin-left: 20px;">${card.response.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ol>`
-        : `"${escapeHtml(card.response)}"`;
+        : (isSystemPlaceholder ? `<span style="opacity: 0.7; font-style: italic;">${escapeHtml(card.response)}</span>` : `"${escapeHtml(card.response)}"`);
 
     const votersText = voters.length > 0 
         ? `Voted as Bot by: <strong>${voters.map(escapeHtml).join(", ")}</strong>` 

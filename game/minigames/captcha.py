@@ -51,10 +51,10 @@ class CaptchaCaptionGame(BaseMinigame):
                 "index": i,
                 "prompt_data": {
                     "type": "image_caption",
-                    "prompt_text": "Describe what is depicted in this image:",
+                    "prompt_text": "Describe what is depicted in this CAPTCHA:",
                     "subject_title": "Security Verification",
                     "image_url": image_url,
-                    "placeholder": "Describe what is depicted in this image..."
+                    "placeholder": "Describe what is depicted in this CAPTCHA..."
                 },
                 "meta": {
                     "chosen_prompt": chosen_prompt,

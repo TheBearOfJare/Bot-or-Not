@@ -25,10 +25,11 @@ class Config:
     # Detected local IP for players joining via QR code
     LOCAL_IP = get_local_ip()
 
-    # Ollama LLM Configuration (qwen3.5:4b with vision capability)
+    # Ollama LLM Configuration (llama3.1:8b for text, qwen3.5:4b for vision)
     OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:4b")
-    OLLAMA_TIMEOUT = 8   # seconds for LLM / vision inference (fast failover to fallbacks)
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+    OLLAMA_VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "qwen3.5:4b")
+    OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", 12))   # seconds for LLM inference (room for model weights swap)
 
     # Timers (in seconds)
     SUBMISSION_TIMEOUT = 30           # Limited time to answer in each minigame (bumped to 30s)

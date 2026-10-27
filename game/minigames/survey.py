@@ -140,16 +140,26 @@ class SurveySaysGame(BaseMinigame):
                     return False
 
             if is_locked:
-                if isinstance(response_data, list):
+                if isinstance(response_data, str) and response_data.startswith("[") and response_data.endswith("]"):
+                    stored_response = response_data
+                elif isinstance(response_data, list):
                     cleaned = [normalize_response(str(x)) for x in response_data if str(x).strip()]
+                    if cleaned:
+                        while len(cleaned) < 3:
+                            cleaned.append(f"Answer {len(cleaned)+1}")
+                        stored_response = cleaned[:3]
+                    else:
+                        stored_response = "[Out of time - Blank submission]"
                 elif isinstance(response_data, str):
                     cleaned = [normalize_response(x) for x in response_data.split("\n") if x.strip()]
+                    if cleaned:
+                        while len(cleaned) < 3:
+                            cleaned.append(f"Answer {len(cleaned)+1}")
+                        stored_response = cleaned[:3]
+                    else:
+                        stored_response = "[Out of time - Blank submission]"
                 else:
-                    cleaned = ["Response 1", "Response 2", "Response 3"]
-
-                while len(cleaned) < 3:
-                    cleaned.append(f"Answer {len(cleaned)+1}")
-                stored_response = cleaned[:3]
+                    stored_response = "[Out of time - Blank submission]"
             else:
                 if isinstance(response_data, list):
                     stored_response = [str(x) for x in response_data]
@@ -172,7 +182,7 @@ class SurveySaysGame(BaseMinigame):
     def finalize_submissions(self, players: Dict[str, Any], question_index: Optional[int] = None):
         """
         Locks any in-progress survey drafts, padding partial answers up to 3,
-        or uses fallbacks if player typed nothing.
+        or uses blank submission placeholder if player typed nothing.
         """
         with self._lock:
             idx = self.current_prompt_index if question_index is None else question_index
@@ -184,13 +194,12 @@ class SurveySaysGame(BaseMinigame):
                 sub_id = f"sub_{pid}"
                 sub = q["submissions"].get(sub_id)
                 if not sub:
-                    fallbacks = [normalize_response(x) for x in self._get_fallback_response_for_question(q)]
                     q["submissions"][sub_id] = {
                         "id": sub_id,
                         "author_id": pid,
                         "author_name": p["name"],
                         "is_bot": False,
-                        "response": fallbacks,
+                        "response": "[Out of time - Blank submission]",
                         "is_locked": True,
                         "version": 0
                     }
@@ -203,5 +212,5 @@ class SurveySaysGame(BaseMinigame):
                         sub["response"] = cleaned[:3]
                         sub["is_locked"] = True
                     else:
-                        sub["response"] = [normalize_response(x) for x in self._get_fallback_response_for_question(q)]
+                        sub["response"] = "[Out of time - Blank submission]"
                         sub["is_locked"] = True

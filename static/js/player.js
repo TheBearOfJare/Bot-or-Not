@@ -630,7 +630,11 @@ async function submitAnswer(isAutoTimeout = false) {
             alert("Please enter at least one answer!");
             return;
         }
-        payload = [a1 || "Answer 1", a2 || "Answer 2", a3 || "Answer 3"];
+        if (!a1 && !a2 && !a3 && isAutoTimeout) {
+            payload = "[Out of time - Blank submission]";
+        } else {
+            payload = [a1 || "Answer 1", a2 || "Answer 2", a3 || "Answer 3"];
+        }
         if (el1 && a1) el1.value = a1;
         if (el2 && a2) el2.value = a2;
         if (el3 && a3) el3.value = a3;
@@ -641,7 +645,7 @@ async function submitAnswer(isAutoTimeout = false) {
             alert("Please write a response!");
             return;
         }
-        payload = val || "[No response submitted]";
+        payload = val || "[Out of time - Blank submission]";
         if (elSingle && val) elSingle.value = val;
     }
 
@@ -800,9 +804,10 @@ function renderVotingScreen(state, isVoteChanged) {
 
     optionsContainer.innerHTML = options.map((opt, i) => {
         const isSelected = selectedVoteIds.includes(opt.id);
+        const isSystemPlaceholder = typeof opt.response === "string" && opt.response.startsWith("[") && opt.response.endsWith("]");
         const content = Array.isArray(opt.response)
             ? `<ol style="margin-left: 20px;">${opt.response.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ol>`
-            : `"${escapeHtml(opt.response)}"`;
+            : (isSystemPlaceholder ? `<span style="opacity: 0.7; font-style: italic;">${escapeHtml(opt.response)}</span>` : `"${escapeHtml(opt.response)}"`);
 
         return `
             <div class="option-card ${isSelected ? 'multi-selected' : ''}" 
