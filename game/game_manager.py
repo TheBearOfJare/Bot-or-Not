@@ -47,12 +47,16 @@ class GameManager:
         
         # Pause status
         self.is_paused: bool = False
+        self.pause_start_time: float = 0.0
+        self.paused_total_duration: float = 0.0
 
     def reset_to_lobby(self, clear_players: bool = False):
         """Reset game state back to lobby."""
         with self.lock:
             self.phase = "LOBBY"
             self.is_paused = False
+            self.pause_start_time = 0.0
+            self.paused_total_duration = 0.0
             self.current_sequence_index = -1
             self.current_game = None
             self.round_number = 0
@@ -69,8 +73,59 @@ class GameManager:
     @property
     def current_submission_timeout(self) -> int:
         if self.current_game and getattr(self.current_game, "game_id", None) == "survey":
-            return getattr(self.config, "SUBMISSION_TIMEOUT_SURVEY", 40)
-        return getattr(self.config, "SUBMISSION_TIMEOUT", 30)
+            return getattr(self.config, "SUBMISSION_TIMEOUT_SURVEY", 45)
+        return getattr(self.config, "SUBMISSION_TIMEOUT", 35)
+
+    @property
+    def current_voting_timeout(self) -> int:
+        is_survey = bool(self.current_game and getattr(self.current_game, "game_id", None) == "survey")
+        per_response = getattr(self.config, "VOTING_TIME_PER_RESPONSE_SURVEY", 15) if is_survey else getattr(self.config, "VOTING_TIME_PER_RESPONSE", 10)
+
+        response_count = 0
+        if self.current_game and hasattr(self.current_game, "questions"):
+            curr_v_idx = getattr(self.current_game, "current_vote_index", 0)
+            if 0 <= curr_v_idx < len(self.current_game.questions):
+                q = self.current_game.questions[curr_v_idx]
+                submissions = q.get("submissions", {})
+                if submissions:
+                    response_count = len(submissions)
+
+        # Fallback if submissions are not yet populated (e.g. before voting phase starts)
+        if response_count == 0:
+            human_count = len(self.players)
+            large_threshold = getattr(self.config, "LARGE_LOBBY_THRESHOLD", 5)
+            bot_count = getattr(self.current_game, "bot_count", None)
+            if bot_count is None:
+                bot_count = 2 if human_count >= large_threshold else 1
+            response_count = human_count + bot_count
+
+        return max(1, response_count) * per_response
+
+    @property
+    def current_time_remaining(self) -> int:
+        if self.phase in ("LOBBY", "GAME_OVER"):
+            return 0
+        now = time.time()
+        if self.is_paused and self.pause_start_time > 0:
+            elapsed = self.pause_start_time - self.phase_start_time - self.paused_total_duration
+        else:
+            elapsed = now - self.phase_start_time - self.paused_total_duration
+
+        if self.phase == "VOTING":
+            timeout = self.current_voting_timeout
+        elif self.phase == "SUBMITTING":
+            timeout = self.current_submission_timeout
+        elif self.phase == "INTRO":
+            timeout = getattr(self.config, "INTRO_TIMEOUT", 32)
+        elif self.phase == "INSTRUCTIONS":
+            timeout = getattr(self.config, "INSTRUCTIONS_TIMEOUT", 8)
+        elif self.phase == "SCOREBOARD":
+            timeout = getattr(self.config, "SCOREBOARD_TIMEOUT", 8)
+        elif self.phase == "BONUS_REVEAL":
+            timeout = 10
+        else:
+            timeout = 30
+        return max(0, int(round(timeout - elapsed)))
 
     def set_game_sequence(self, sequence: List[str]):
         """Allow host to customize which minigames are played and in what order."""
@@ -100,14 +155,20 @@ class GameManager:
             self.player_history[player_id] = []
             return self.players[player_id]
 
-    def remove_player(self, player_id: str):
+    def remove_player(self, player_id: str) -> bool:
+        """Remove a player from the game session (e.g. kicked from lobby by host)."""
         with self.lock:
-            if player_id in self.players:
-                del self.players[player_id]
+            if player_id not in self.players:
+                return False
+            name = self.players[player_id].get("name", player_id)
+            del self.players[player_id]
             if player_id in self.player_history:
                 del self.player_history[player_id]
             if player_id in self.player_round_scores:
                 del self.player_round_scores[player_id]
+            self.last_round_rankings = [r for r in self.last_round_rankings if r.get("id") != player_id]
+            print(f"[GameManager] Player removed from lobby: {name} ({player_id})")
+            return True
 
     def start_game(self) -> bool:
         """
@@ -123,6 +184,8 @@ class GameManager:
             self.current_sequence_index = 0
             self.round_number = 1
             self.is_paused = False
+            self.pause_start_time = 0.0
+            self.paused_total_duration = 0.0
             self.last_round_rankings.clear()
             self.player_round_scores.clear()
             self._load_current_game()
@@ -174,7 +237,15 @@ class GameManager:
     def toggle_pause(self) -> bool:
         """Toggles the game pause state."""
         with self.lock:
-            self.is_paused = not self.is_paused
+            now = time.time()
+            if not self.is_paused:
+                self.is_paused = True
+                self.pause_start_time = now
+            else:
+                self.is_paused = False
+                if self.pause_start_time > 0:
+                    self.paused_total_duration += (now - self.pause_start_time)
+                self.pause_start_time = 0.0
             print(f"[GameManager] Pause toggled: is_paused={self.is_paused}")
             return self.is_paused
 
@@ -191,6 +262,8 @@ class GameManager:
             now = time.time()
             self.phase_start_time = now
             self.is_paused = False
+            self.pause_start_time = 0.0
+            self.paused_total_duration = 0.0
 
             if self.phase == "LOBBY":
                 return self.start_game()
@@ -237,10 +310,16 @@ class GameManager:
                 total_q = getattr(self.current_game, "questions_count", 1) if self.current_game else 1
                 curr_v_idx = getattr(self.current_game, "current_vote_index", 0) if self.current_game else 0
 
+                # Finalize votes for current question before advancing so unlocked draft votes are preserved
+                if self.current_game and hasattr(self.current_game, "finalize_votes"):
+                    self.current_game.finalize_votes(self.players, question_index=curr_v_idx)
+
                 # Check if there are more sets of responses to vote on one after the other
                 if self.current_game and curr_v_idx + 1 < total_q:
                     self.current_game.current_vote_index += 1
                     self.phase_start_time = now
+                    self.pause_start_time = 0.0
+                    self.paused_total_duration = 0.0
                     print(f"[GameManager] Advancing to Voting Set {self.current_game.current_vote_index + 1} of {total_q}")
                 else:
                     # All voting sets complete! Calculate scores and start REVEAL!
@@ -453,21 +532,49 @@ class GameManager:
                 self.next_phase(expected_phase="SUBMITTING")
             return ok
 
-    def handle_player_vote(self, player_id: str, target_option_ids: Any, question_index: Optional[int] = None) -> bool:
+    def handle_player_vote(self, player_id: str, target_option_ids: Any, question_index: Optional[int] = None, is_locked: bool = True) -> bool:
         with self.lock:
-            if self.phase != "VOTING" or not self.current_game:
+            if not self.current_game:
                 return False
 
+            now = time.time()
             curr_idx = getattr(self.current_game, "current_vote_index", 0)
-            if question_index is not None and question_index != curr_idx:
+
+            # Normal case: during VOTING phase
+            if self.phase == "VOTING":
+                target_q_idx = curr_idx if question_index is None else question_index
+
+                if target_q_idx == curr_idx:
+                    ok = self.current_game.submit_vote(
+                        player_id, target_option_ids, is_locked=is_locked, question_index=curr_idx
+                    )
+                    # Auto-advance if all human players voted AND locked in for THIS set
+                    if ok and is_locked and not self.is_paused and self.current_game.are_votes_complete(list(self.players.keys()), question_index=curr_idx):
+                        self.next_phase(expected_phase="VOTING")
+                    return ok
+
+                # Grace window: vote for previous question that transitioned within 3 seconds
+                elif target_q_idx == curr_idx - 1 and (now - self.phase_start_time) < 3.0:
+                    ok = self.current_game.submit_vote(
+                        player_id, target_option_ids, is_locked=True, question_index=target_q_idx
+                    )
+                    return ok
+
                 return False
 
-            ok = self.current_game.submit_vote(player_id, target_option_ids, question_index=curr_idx)
-            
-            # Auto-advance if all human players voted for THIS set
-            if ok and not self.is_paused and self.current_game.are_votes_complete(list(self.players.keys()), question_index=curr_idx):
-                self.next_phase(expected_phase="VOTING")
-            return ok
+            # Grace window: if phase just transitioned to REVEAL within 3 seconds, allow late arriving votes for final question
+            elif self.phase == "REVEAL" and (now - self.phase_start_time) < 3.0:
+                total_q = getattr(self.current_game, "questions_count", 1)
+                target_q_idx = (total_q - 1) if question_index is None else question_index
+                ok = self.current_game.submit_vote(
+                    player_id, target_option_ids, is_locked=True, question_index=target_q_idx
+                )
+                if ok:
+                    # Recalculate scores and reveal data since late vote was received
+                    self._finalize_round_and_rankings()
+                return ok
+
+            return False
 
     def handle_bonus_guess(self, player_id: str, guesses: Dict[str, str]) -> bool:
         with self.lock:
@@ -527,8 +634,9 @@ class GameManager:
             "join_url": f"http://{self.config.LOCAL_IP}:{self.config.PORT}/player",
             "scores_hidden": not is_game_over,
             "max_votes_per_player": max_votes,
+            "time_remaining": self.current_time_remaining,
             "submission_timeout": self.current_submission_timeout,
-            "voting_timeout": self.config.VOTING_TIMEOUT,
+            "voting_timeout": self.current_voting_timeout,
             "rankings": self.last_round_rankings,
             "question_info": {
                 "current_prompt_index": curr_prompt_idx,
@@ -599,8 +707,13 @@ class GameManager:
             curr_idx = getattr(self.current_game, "current_vote_index", 0)
             q = self.current_game.questions[curr_idx] if hasattr(self.current_game, "questions") and curr_idx < len(self.current_game.questions) else {}
             voted_ids = set(q.get("votes", {}).keys())
+            draft_ids = set(q.get("draft_votes", {}).keys())
             base_state["voting_status"] = [
-                {"name": p["name"], "has_voted": p["id"] in voted_ids}
+                {
+                    "name": p["name"],
+                    "has_voted": p["id"] in voted_ids,
+                    "has_draft": p["id"] in draft_ids and p["id"] not in voted_ids
+                }
                 for p in self.players.values()
             ]
             base_state["voting_options"] = self.current_game.get_voting_options(question_index=curr_idx)
@@ -658,8 +771,9 @@ class GameManager:
                 "score_display": f"{player['score']} pts"
             },
             "round_number": self.round_number,
+            "time_remaining": self.current_time_remaining,
             "submission_timeout": self.current_submission_timeout,
-            "voting_timeout": self.config.VOTING_TIMEOUT,
+            "voting_timeout": self.current_voting_timeout,
             "max_votes_per_player": max_votes,
             "round_summary": round_summary,
             "question_info": {
@@ -724,6 +838,9 @@ class GameManager:
                     state["status_message"] = f"Vote for Set {curr_vote_idx + 1} locked in! Next set coming up..."
                 else:
                     state["status_message"] = "Final vote locked in! Watch the TV screen for the reveal!"
+            else:
+                draft_votes = q.get("draft_votes", {}).get(player_id, [])
+                state["draft_vote_ids"] = draft_votes
 
         elif self.phase in ("REVEAL", "BONUS_REVEAL"):
             state["status_message"] = "Check your secret score below and look at the TV for the reveal!"

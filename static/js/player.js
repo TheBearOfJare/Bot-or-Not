@@ -598,7 +598,10 @@ function renderSubmittingScreen(state, isPromptChanged) {
         clearTimeout(draftSyncTimer);
 
         // Start countdown timer for this prompt
-        startMobileTimer(state.submission_timeout || 30, "player-submit-seconds", () => {
+        const submitTimerSec = (typeof state.time_remaining === "number" && state.time_remaining >= 0)
+            ? state.time_remaining
+            : (state.submission_timeout || 35);
+        startMobileTimer(submitTimerSec, "player-submit-seconds", () => {
             submitAnswer(true);
         });
     } else if (state.draft && !state.has_submitted) {
@@ -814,9 +817,15 @@ function renderVotingScreen(state, isVoteChanged) {
     if (isVoteChanged) {
         lastVotingRound = state.round_number;
         lastVotingQuestionIdx = currVoteIdx;
-        selectedVoteIds = [];
+        selectedVoteIds = Array.isArray(state.draft_vote_ids) ? [...state.draft_vote_ids] : [];
         updateMultiVoteButton();
-        startMobileTimer(state.voting_timeout || 25, "player-vote-seconds", null);
+        const timerSeconds = (typeof state.time_remaining === "number" && state.time_remaining >= 0)
+            ? state.time_remaining
+            : (state.voting_timeout || 25);
+        startMobileTimer(timerSeconds, "player-vote-seconds", autoSubmitVotes);
+    } else if (selectedVoteIds.length === 0 && Array.isArray(state.draft_vote_ids) && state.draft_vote_ids.length > 0) {
+        selectedVoteIds = [...state.draft_vote_ids];
+        updateMultiVoteButton();
     }
 
     const optionsContainer = document.getElementById("player-voting-options");
@@ -854,10 +863,13 @@ function renderVotingScreen(state, isVoteChanged) {
     }).join("");
 }
 
+let voteDraftTimer = null;
+
 function handleOptionClick(optionId) {
     if (maxVotesRequired === 1) {
         // Single vote immediate submit
-        submitVotes([optionId]);
+        selectedVoteIds = [optionId];
+        submitVotes([optionId], true);
     } else {
         // Toggle selection for 2 votes
         if (selectedVoteIds.includes(optionId)) {
@@ -872,6 +884,37 @@ function handleOptionClick(optionId) {
             }
         }
         updateMultiVoteUI();
+        syncVoteDraft(selectedVoteIds);
+    }
+}
+
+function syncVoteDraft(ids) {
+    clearTimeout(voteDraftTimer);
+    voteDraftTimer = setTimeout(async () => {
+        if (currentPhaseCached !== "VOTING" || !playerId) return;
+        const currQIdx = lastStateCached?.question_info?.current_vote_index ?? (lastStateCached?.question_index ?? 0);
+        try {
+            await fetch("/api/vote", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    player_id: playerId,
+                    target_option_ids: ids,
+                    question_index: currQIdx,
+                    is_locked: false
+                })
+            });
+        } catch (e) {
+            console.warn("Vote draft sync error:", e);
+        }
+    }, 150);
+}
+
+function autoSubmitVotes() {
+    if (lastStateCached?.has_voted) return;
+    if (selectedVoteIds.length > 0) {
+        clearTimeout(voteDraftTimer);
+        submitVotes(selectedVoteIds, true);
     }
 }
 
@@ -915,11 +958,15 @@ async function submitMultiVotes() {
         alert(`Please select ${maxVotesRequired} bot responses!`);
         return;
     }
-    submitVotes(selectedVoteIds);
+    clearTimeout(voteDraftTimer);
+    submitVotes(selectedVoteIds, true);
 }
 
-async function submitVotes(optionIds) {
-    clearInterval(playerCountdown);
+async function submitVotes(optionIds, isLocked = true) {
+    clearTimeout(voteDraftTimer);
+    if (isLocked) {
+        clearInterval(playerCountdown);
+    }
     const currQIdx = lastStateCached?.question_info?.current_vote_index ?? (lastStateCached?.question_index ?? 0);
 
     try {
@@ -929,11 +976,12 @@ async function submitVotes(optionIds) {
             body: JSON.stringify({
                 player_id: playerId,
                 target_option_ids: optionIds,
-                question_index: currQIdx
+                question_index: currQIdx,
+                is_locked: isLocked
             })
         });
         const data = await res.json();
-        if (data.success) {
+        if (data.success && isLocked) {
             pollPlayerState();
         }
     } catch (err) {

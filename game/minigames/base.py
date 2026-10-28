@@ -273,30 +273,70 @@ class BaseMinigame:
         rnd.shuffle(options)
         return options
 
-    def submit_vote(self, voter_id: str, target_option_ids: Union[str, List[str]], question_index: Optional[int] = None) -> bool:
+    def submit_vote(self, voter_id: str, target_option_ids: Union[str, List[str]], is_locked: bool = True, question_index: Optional[int] = None) -> bool:
         """
         Record a player's vote(s) on which submission(s) they believe are BOT(s) for a question.
+        Supports both locked votes (final) and draft votes (in-progress selections).
         """
         with self._lock:
             idx = self.current_vote_index if question_index is None else question_index
             if not (0 <= idx < len(self.questions)):
                 return False
             q = self.questions[idx]
+            q.setdefault("votes", {})
+            drafts = q.setdefault("draft_votes", {})
 
             if isinstance(target_option_ids, str):
                 selected = [target_option_ids]
             elif isinstance(target_option_ids, list):
                 selected = [str(x) for x in target_option_ids]
             else:
-                return False
+                selected = []
 
-            valid_ids = [opt_id for opt_id in selected if opt_id in q["submissions"]]
-            if not valid_ids:
-                return False
+            valid_ids = [
+                opt_id for opt_id in selected 
+                if opt_id in q["submissions"] and q["submissions"][opt_id].get("author_id") != voter_id
+            ]
 
-            # Store up to max_votes_per_player
-            q["votes"][voter_id] = valid_ids[:self.max_votes_per_player]
-            return True
+            if is_locked:
+                if not valid_ids:
+                    return False
+                # Store up to max_votes_per_player
+                q["votes"][voter_id] = valid_ids[:self.max_votes_per_player]
+                drafts.pop(voter_id, None)
+                return True
+            else:
+                # In draft mode, do not downgrade if already locked in
+                if voter_id in q["votes"]:
+                    return True
+                drafts[voter_id] = valid_ids[:self.max_votes_per_player]
+                return True
+
+    def finalize_votes(self, players: Dict[str, Any], question_index: Optional[int] = None):
+        """
+        Called when voting phase times out or phase advances.
+        Locks all pending human draft votes into actual votes so unlocked selections are not lost.
+        """
+        with self._lock:
+            idx = self.current_vote_index if question_index is None else question_index
+            if not (0 <= idx < len(self.questions)):
+                return
+            q = self.questions[idx]
+            q.setdefault("votes", {})
+            drafts = q.setdefault("draft_votes", {})
+
+            for pid in players:
+                # If player already locked in, leave it
+                if pid in q["votes"]:
+                    continue
+
+                player_drafts = drafts.get(pid, [])
+                valid = [
+                    oid for oid in player_drafts 
+                    if oid in q["submissions"] and q["submissions"][oid].get("author_id") != pid
+                ]
+                if valid:
+                    q["votes"][pid] = valid[:self.max_votes_per_player]
 
     def are_votes_complete(self, active_player_ids: List[str], question_index: Optional[int] = None) -> bool:
         """
@@ -307,7 +347,7 @@ class BaseMinigame:
             if not (0 <= idx < len(self.questions)):
                 return False
             q = self.questions[idx]
-            return set(active_player_ids).issubset(set(q["votes"].keys()))
+            return set(active_player_ids).issubset(set(q.get("votes", {}).keys()))
 
     def calculate_scores(self, config) -> Dict[str, Any]:
         """

@@ -14,8 +14,8 @@
         <p class="subtitle" style="font-size: 1.15rem; margin-top: 6px;">// Party Deduction Game &amp; AI Turing Challenge</p>
         
         <div class="title-status-box">
-            <div class="title-status-line"><span class="hl-green">✓</span> ACCESS_POINT: <span class="hl-cyan">http://{{ local_ip }}:{{ port }}</span></div>
-            <div class="title-status-line"><span class="hl-green">✓</span> PLAYER_CONTROLLERS: <span class="hl-cyan">http://{{ local_ip }}:{{ port }}/player</span></div>
+            <div class="title-status-line"><span class="hl-green">✓</span> ACCESS_POINT: <span class="hl-cyan">{{ base_url }}</span></div>
+            <div class="title-status-line"><span class="hl-green">✓</span> PLAYER_CONTROLLERS: <span class="hl-cyan">{{ join_url }}</span></div>
             <div class="title-status-line"><span class="hl-amber">⚡</span> AUDIO_SUBSYSTEM: <span>STANDBY // AWAITING OPERATOR LAUNCH</span></div>
         </div>
 
@@ -39,7 +39,7 @@
         </div>
         <div id="host-network-info" style="text-align: right;">
             <div class="network-label">// ACCESS_POINT_URL</div>
-            <div class="join-url" id="join-url-text">http://{{ local_ip }}:{{ port }}/player</div>
+            <div class="join-url" id="join-url-text">{{ join_url }}</div>
         </div>
     </header>
 
@@ -49,18 +49,19 @@
             <!-- Col 1: QR Code & Connection (Join Station) -->
             <div class="lobby-col lobby-qr-col" style="text-align: center;">
                 <h2>&gt; SCAN TO JOIN</h2>
-                <p class="subtitle" style="margin-bottom: 8px; font-size: 0.85rem;">// Connect to Wi-Fi &amp; scan:</p>
+                <p class="subtitle" style="margin-bottom: 8px; font-size: 0.85rem;">// Scan QR code to connect:</p>
                 <div class="qr-container">
                     <div class="qr-box">
                         <img src="/qr" alt="Join Game QR Code" id="lobby-qr-img">
                     </div>
                 </div>
-                <div class="join-url" style="font-size: 1.15rem; margin-top: 4px;">http://{{ local_ip }}:{{ port }}/player</div>
+                <div class="join-url" style="font-size: 1.15rem; margin-top: 4px;">{{ join_url }}</div>
             </div>
 
             <!-- Col 2: Connected Agents & Start Game (Roster & Launchpad) -->
             <div class="lobby-col lobby-roster-col">
                 <h2>&gt; CONNECTED AGENTS (<span id="player-count">0</span>)</h2>
+                <p class="subtitle" style="margin-bottom: 8px; font-size: 0.85rem;">// Click a name to remove from lobby</p>
                 <div class="player-list" id="lobby-players-list" style="min-height: 120px; align-content: flex-start;">
                     <p style="color: var(--text-secondary);" id="no-players-text">[ Waiting for agents to connect with devices... ]</p>
                 </div>
@@ -139,7 +140,7 @@
             </div>
             <div class="timer-pill" id="host-submitting-timer-box">
                 <span class="btn-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
-                <span id="submitting-timer">30</span>s
+                <span id="submitting-timer">35</span>s
             </div>
         </div>
 
@@ -166,7 +167,7 @@
             </div>
             <div class="timer-pill" id="host-voting-timer-box">
                 <span class="btn-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
-                <span id="voting-timer">25</span>s
+                <span id="voting-timer">60</span>s
             </div>
         </div>
         <h2 style="font-size: 1.8rem; text-align: center; margin-bottom: 6px;" id="voting-header-title">&gt; WHICH RESPONSE IS THE BOT?</h2>

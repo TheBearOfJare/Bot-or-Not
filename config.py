@@ -1,6 +1,25 @@
 import os
 import socket
 
+def load_dotenv():
+    """Load key-value pairs from a local .env file if present."""
+    env_file = os.path.join(os.path.dirname(__file__), ".env")
+    if os.path.isfile(env_file):
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+        except Exception:
+            pass
+
+load_dotenv()
+
 def get_local_ip() -> str:
     """
     Attempts to discover the host's actual LAN IPv4 address (e.g. 192.168.x.x or 10.x.x.x)
@@ -22,8 +41,26 @@ class Config:
     DEBUG = os.getenv("FLASK_DEBUG", "True").lower() in ("true", "1")
     SECRET_KEY = os.getenv("SECRET_KEY", "bot-or-not-secret-key-jackbox-party-2026")
     
+    # Public tunnel URL (e.g. Cloudflare Tunnel or ngrok)
+    PUBLIC_URL = os.getenv("PUBLIC_URL", "").strip().rstrip("/")
+
     # Detected local IP for players joining via QR code
     LOCAL_IP = get_local_ip()
+
+    @classmethod
+    def get_join_url(cls) -> str:
+        """Returns the URL mobile players use to connect."""
+        if cls.PUBLIC_URL:
+            base = cls.PUBLIC_URL.removesuffix("/player")
+            return f"{base}/player"
+        return f"http://{cls.LOCAL_IP}:{cls.PORT}/player"
+
+    @classmethod
+    def get_base_url(cls) -> str:
+        """Returns the base root URL."""
+        if cls.PUBLIC_URL:
+            return cls.PUBLIC_URL.removesuffix("/player")
+        return f"http://{cls.LOCAL_IP}:{cls.PORT}"
 
     # Ollama LLM Configuration (llama3.1:8b for text, qwen3.5:4b for vision)
     OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
@@ -32,9 +69,11 @@ class Config:
     OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", 12))   # seconds for LLM inference (room for model weights swap)
 
     # Timers (in seconds)
-    SUBMISSION_TIMEOUT = 30           # Limited time to answer in each minigame (bumped to 30s)
-    SUBMISSION_TIMEOUT_SURVEY = 40    # Extended time for Survey Says (3 answers)
-    VOTING_TIMEOUT = 25               # Limited time to vote
+    SUBMISSION_TIMEOUT = int(os.getenv("SUBMISSION_TIMEOUT", 35))                 # Limited time to answer in each minigame (35s)
+    SUBMISSION_TIMEOUT_SURVEY = int(os.getenv("SUBMISSION_TIMEOUT_SURVEY", 45))   # Extended time for Survey Says (3 answers) (45s)
+    VOTING_TIME_PER_RESPONSE = int(os.getenv("VOTING_TIME_PER_RESPONSE", 10))    # 10s per response submitted for voting (6 answers = 1 min)
+    VOTING_TIME_PER_RESPONSE_SURVEY = int(os.getenv("VOTING_TIME_PER_RESPONSE_SURVEY", 15)) # 15s per response submitted for Survey Says voting
+    VOTING_TIMEOUT = int(os.getenv("VOTING_TIMEOUT", 30))                         # Fallback default voting timeout
     INTRO_TIMEOUT = 32                # Game orientation / voicelines briefing display time
     INSTRUCTIONS_TIMEOUT = 8          # Instructions display time
     REVEAL_TIMEOUT = 10               # Reveal phase display time

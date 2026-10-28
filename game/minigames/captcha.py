@@ -102,6 +102,7 @@ class CaptchaCaptionGame(BaseMinigame):
                 },
                 "submissions": {},
                 "votes": {},
+                "draft_votes": {},
                 "bot_ids": []
             })
 

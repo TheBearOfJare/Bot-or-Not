@@ -197,12 +197,19 @@ function renderLobby(state) {
     const playerContainer = document.getElementById("lobby-players-list");
     
     if (state.players.length === 0) {
-        playerContainer.innerHTML = '<p style="color: #9ca3af;" id="no-players-text">Waiting for players to scan QR code and join...</p>';
+        playerContainer.innerHTML = '<p style="color: var(--text-secondary);" id="no-players-text">[ Waiting for agents to connect with devices... ]</p>';
     } else {
         playerContainer.innerHTML = state.players.map(p => `
-            <div class="player-badge ready">
-                <span>👤</span>
-                <span>${escapeHtml(p.name)}</span>
+            <div class="player-badge ready lobby-player-badge"
+                 onclick="removePlayer('${escapeHtml(p.id)}')"
+                 onkeydown="if(event.key==='Enter'||event.key===' ') { event.preventDefault(); removePlayer('${escapeHtml(p.id)}'); }"
+                 title="Click to remove ${escapeHtml(p.name)} from lobby"
+                 role="button"
+                 tabindex="0"
+                 aria-label="Remove ${escapeHtml(p.name)} from lobby">
+                <span class="player-badge-icon">👤</span>
+                <span class="player-badge-name">${escapeHtml(p.name)}</span>
+                <span class="player-remove-x" aria-hidden="true">&times;</span>
             </div>
         `).join("");
     }
@@ -228,6 +235,33 @@ function renderLobby(state) {
                 </label>
             </div>
         `).join("");
+    }
+}
+
+const removingPlayerIds = new Set();
+
+async function removePlayer(playerId) {
+    if (!playerId || removingPlayerIds.has(playerId)) return;
+    removingPlayerIds.add(playerId);
+    try {
+        const res = await fetch("/api/remove_player", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ player_id: playerId })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.state) {
+                currentState = data.state;
+                renderHostView(data.state);
+            } else {
+                pollHostState();
+            }
+        }
+    } catch (err) {
+        console.error("Failed to remove player:", err);
+    } finally {
+        removingPlayerIds.delete(playerId);
     }
 }
 
@@ -382,7 +416,10 @@ function renderSubmitting(state, isNewPrompt) {
     }
 
     if (isNewPrompt) {
-        startCountdown(state.submission_timeout || 30, "submitting-timer", advancePhase);
+        const timerSeconds = (typeof state.time_remaining === "number" && state.time_remaining >= 0)
+            ? state.time_remaining
+            : (state.submission_timeout || 35);
+        startCountdown(timerSeconds, "submitting-timer", advancePhase);
     }
 
     // Submissions progress badges
@@ -461,7 +498,14 @@ function renderVoting(state, isNewVote) {
     }
 
     if (isNewVote) {
-        startCountdown(state.voting_timeout || 25, "voting-timer", advancePhase);
+        const timerSeconds = (typeof state.time_remaining === "number" && state.time_remaining >= 0)
+            ? state.time_remaining
+            : (state.voting_timeout || 25);
+        startCountdown(timerSeconds, "voting-timer", () => {
+            // Buffer 1.5s after timer hits 0 on TV before advancing
+            // Ensures in-flight mobile votes and mobile auto-submits are received cleanly
+            setTimeout(advancePhase, 1500);
+        });
     }
 
     // Render anonymized responses grid
@@ -487,10 +531,10 @@ function renderVoting(state, isNewVote) {
     const statusList = document.getElementById("voting-players-list");
     if (state.voting_status) {
         statusList.innerHTML = state.voting_status.map(p => `
-            <div class="player-badge ${p.has_voted ? 'ready' : 'pending'}">
-                <span>${p.has_voted ? '<span class="hl-green">✓</span>' : '<span class="hl-amber">◌</span>'}</span>
+            <div class="player-badge ${p.has_voted ? 'ready' : (p.has_draft ? 'drafting' : 'pending')}">
+                <span>${p.has_voted ? '<span class="hl-green">✓</span>' : (p.has_draft ? '<span class="hl-amber">✍</span>' : '<span class="hl-amber">◌</span>')}</span>
                 <span>${escapeHtml(p.name)}</span>
-                <span style="font-size: 0.85rem; color: #9ca3af;">${p.has_voted ? '[VOTED]' : '[DECIDING...]'}</span>
+                <span style="font-size: 0.85rem; color: #9ca3af;">${p.has_voted ? '[VOTED]' : (p.has_draft ? '[SELECTING...]' : '[DECIDING...]')}</span>
             </div>
         `).join("");
     }

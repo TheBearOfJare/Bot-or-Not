@@ -379,11 +379,65 @@ h3 {
     color: #ffffff;
 }
 
+.player-badge.drafting {
+    border-color: #fbbf24;
+    background: rgba(251, 191, 36, 0.12);
+    color: #fef08a;
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.2);
+}
+
 .player-badge.pending {
     border-style: dashed;
     border-color: var(--text-muted);
     color: var(--text-secondary);
     opacity: 0.75;
+}
+
+.lobby-player-badge {
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    padding-right: 12px;
+}
+
+.lobby-player-badge .player-remove-x {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 6px;
+    font-size: 1.15rem;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 700;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.lobby-player-badge:hover {
+    border-color: var(--terminal-red);
+    background: var(--terminal-red-dim);
+    box-shadow: 0 0 16px var(--terminal-red-glow);
+    color: #ffffff;
+    transform: translateY(-2px);
+}
+
+.lobby-player-badge:hover .player-badge-name {
+    color: #fca5a5;
+    text-decoration: line-through;
+}
+
+.lobby-player-badge:hover .player-remove-x {
+    color: var(--terminal-red);
+    transform: scale(1.25);
+    text-shadow: 0 0 8px var(--terminal-red-glow);
+}
+
+.lobby-player-badge:active {
+    transform: translateY(0);
+}
+
+.lobby-player-badge:focus-visible {
+    outline: 2px solid var(--terminal-red);
+    outline-offset: 2px;
 }
 
 /* Tags & Indicators */

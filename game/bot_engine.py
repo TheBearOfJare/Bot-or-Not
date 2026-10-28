@@ -43,7 +43,7 @@ class BotEngine:
     def clean_human_response(self, text: str, max_words: int = 12, strip_setup: str = "", strip_final_period: bool = True) -> str:
         """
         Cleans and post-processes LLM output to match real human player behavior:
-        - Real humans under a 30s timer type brief, casual phrases (under 12 words).
+        - Real humans under a 35s timer type brief, casual phrases (under 12 words).
         - Strips AI prefix chatter ('Punchline:', 'Review:', 'It looks like', etc.).
         - Keeps the first complete sentence/clause without chopping words mid-sentence.
         - Strips setup repetitions, markdown, and excessive punctuation.
@@ -166,7 +166,7 @@ class BotEngine:
             payload = {
                 "model": target_model,
                 "prompt": prompt,
-                "system": system_prompt or "You are a human playing a fast party game on your phone with friends under a 30-second timer. You type quick, short, casual, and possibly humorous responses.",
+                "system": system_prompt or "You are a human playing a fast party game on your phone with friends under a 35-second timer. You type quick, short, casual, and possibly humorous responses.",
                 "stream": False,
                 "think": False,
                 "options": {

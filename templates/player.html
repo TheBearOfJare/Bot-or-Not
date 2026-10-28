@@ -20,7 +20,7 @@
     <div id="screen-join" class="card">
         <h3>&gt; AUTHENTICATE AGENT</h3>
         <p class="subtitle">// Enter agent callsign to join current session:</p>
-        <form id="join-form" onsubmit="handleJoin(event)">
+        <form id="join-form" onsubmit="event.preventDefault(); handleJoin(event); return false;">
             <input type="text" id="player-name-input" name="player_name" placeholder="Callsign / Nickname" maxlength="18" required autofocus autocapitalize="words" autocorrect="off" autocomplete="off" spellcheck="false" enterkeyhint="go">
             <button type="submit" class="btn btn-primary" id="btn-join">[ &gt; AUTHENTICATE &amp; ENTER ]</button>
         </form>
@@ -58,7 +58,7 @@
                 </div>
                 <div class="timer-pill" id="player-submit-timer" style="padding: 2px 10px; font-size: 0.95rem;">
                     <span class="btn-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
-                    <span id="player-submit-seconds">30</span>s
+                    <span id="player-submit-seconds">35</span>s
                 </div>
             </div>
             
@@ -104,7 +104,7 @@
                 </div>
                 <div class="timer-pill" id="player-vote-timer" style="padding: 2px 10px; font-size: 0.95rem;">
                     <span class="btn-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
-                    <span id="player-vote-seconds">25</span>s
+                    <span id="player-vote-seconds">60</span>s
                 </div>
             </div>
 

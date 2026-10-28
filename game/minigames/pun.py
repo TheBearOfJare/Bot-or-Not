@@ -86,6 +86,7 @@ class CompleteThePunGame(BaseMinigame):
                 },
                 "submissions": {},
                 "votes": {},
+                "draft_votes": {},
                 "bot_ids": []
             })
 
