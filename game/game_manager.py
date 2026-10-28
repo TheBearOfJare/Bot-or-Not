@@ -6,12 +6,18 @@ from typing import Dict, Any, List, Optional
 from config import Config
 from game.bot_engine import BotEngine
 from game.minigames import MINIGAME_REGISTRY, create_minigame_instance
+from game.prompt_tracker import prompt_tracker
+from game.minigames.captcha import clear_captcha_images
 
 class GameManager:
     def __init__(self, config=Config):
         self.config = config
         self.bot_engine = BotEngine(config.OLLAMA_URL, config.OLLAMA_MODEL)
+        self.prompt_tracker = prompt_tracker
         self.lock = threading.RLock()
+        
+        # Clear generated CAPTCHA images on startup
+        clear_captcha_images()
         
         self.players: Dict[str, Dict[str, Any]] = {}
         # player_id -> list of { "round": int, "game_title": str, "prompt": str, "response": Any }

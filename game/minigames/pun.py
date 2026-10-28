@@ -3,6 +3,7 @@ import json
 import random
 from typing import Dict, Any, List
 from game.minigames.base import BaseMinigame
+from game.prompt_tracker import prompt_tracker
 
 PROMPTS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "prompts", "pun.json"))
 
@@ -61,8 +62,7 @@ class CompleteThePunGame(BaseMinigame):
 
     def _select_prompts(self):
         pool = list(load_pun_prompts())
-        random.shuffle(pool)
-        chosen_list = [pool[i % len(pool)] for i in range(self.questions_count)]
+        chosen_list = prompt_tracker.select_prompts("pun", pool, self.questions_count)
 
         self.questions = []
         for i, item in enumerate(chosen_list):

@@ -176,8 +176,20 @@ def api_toggle_pause():
     is_paused = game_manager.toggle_pause()
     return jsonify({"success": True, "is_paused": is_paused, "state": game_manager.get_host_state()})
 
+@app.route("/api/prompt_log", methods=["GET"])
+def api_prompt_log():
+    game_id = request.args.get("game_id")
+    return jsonify({
+        "success": True,
+        "stats": game_manager.prompt_tracker.get_stats(),
+        "log": game_manager.prompt_tracker.get_log(game_id=game_id)
+    })
+
 if __name__ == "__main__":
     import threading
+    from game.minigames.captcha import clear_captcha_images
+    clear_captcha_images()
+
     threading.Thread(target=game_manager.bot_engine.prewarm, daemon=True).start()
 
     print(f"\n=======================================================")

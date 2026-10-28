@@ -4,6 +4,7 @@ import random
 from typing import Any, Dict, List, Optional
 from game.minigames.base import BaseMinigame
 from game.normalization import normalize_response
+from game.prompt_tracker import prompt_tracker
 
 PROMPTS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "prompts", "survey.json"))
 
@@ -59,8 +60,7 @@ class SurveySaysGame(BaseMinigame):
 
     def _select_prompts(self):
         pool = list(load_survey_prompts())
-        random.shuffle(pool)
-        chosen_list = [pool[i % len(pool)] for i in range(self.questions_count)]
+        chosen_list = prompt_tracker.select_prompts("survey", pool, self.questions_count)
 
         self.questions = []
         for i, item in enumerate(chosen_list):

@@ -4,8 +4,15 @@ import re
 import base64
 import random
 import requests
+from typing import Optional, List
 from PIL import Image
 from config import Config
+
+CAPTCHA_OBJECTS = [
+    "fire hydrant", "school bus", "red car", "bicycle", "motorcycle",
+    "traffic light", "stop sign", "cat", "dog", "cow", "bear",
+    "slice of pizza", "boat", "train", "bench", "crosswalk", "umbrella"
+]
 
 class BotEngine:
     def __init__(self, ollama_url: str = None, model: str = None, vision_model: str = None):
@@ -225,7 +232,7 @@ class BotEngine:
             f"{criteria}\n"
             f"Output ONLY the single digit of the winner (e.g. 1, 2, or 3). Do not write any other text."
         )
-        sys_prompt = "You are an expert comedy judge picking the funniest and cleverest party game response."
+        sys_prompt = "You are an expert comedy judge picking the funniest and cleverest party game response. Prioritize creative use of content and conciseness."
 
         judge_res = self.query_ollama(
             judge_prompt,
@@ -249,12 +256,12 @@ class BotEngine:
             f"Write a hilarious punchline (1 to 6 words) to complete or answer this prompt:\n"
             f"Prompt: {pun_setup}\n\n"
             f"How to make it funny (pick the angle that fits best):\n"
-            f"- Clever double meaning or wordplay that fits naturally (e.g. a relationship that 'had no future', a balloon business that 'never took off')\n"
-            f"- Relatable truth or sarcastic twist (e.g. introverts' candle smelling like 'cancelled plans', coffee called 'liquid panic')\n"
+            f"- Clever double meaning or wordplay that fits naturally (e.g. a timetravel relationship that 'had no future', a balloon business that 'never took off')\n"
+            f"- Relatable truth or sarcastic twist (e.g. introverts' candle smelling like 'cancelled plans', coffee called 'liquid sleep substitute')\n"
             f"- An absurd, deadpan, or unexpected punchline\n\n"
             f"CRITICAL RULES:\n"
             f"- Must make grammatical sense in natural English. Do NOT invent gibberish or broken words just to force a pun.\n"
-            f"- If the prompt ends with '...', your punchline must complete the sentence seamlessly.\n"
+            f"- If the prompt ends with '...', your punchline must complete the sentence seamlessly. Do not repeat the last word of the prompt.\n"
             f"- 1 to 6 words only.\n"
             f"- Output ONLY the punchline. No quotes, no explanations, no conversational intro."
         )
@@ -263,12 +270,12 @@ class BotEngine:
         sys_prompt = "You are a witty comedian playing a fast party game on your phone, writing punchy, natural, and hilarious punchlines."
         return prompt, sys_prompt
 
-    def generate_pun_punchline(self, pun_setup: str, fallback_answers: list = None, num_candidates: int = 3) -> str:
+    def generate_pun_punchline(self, pun_setup: str, fallback_answers: list = None, num_candidates: int = 6) -> str:
         prompt, sys_prompt = self.build_pun_prompt(pun_setup)
         
         candidates = []
         for _ in range(num_candidates):
-            ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.75, top_k=40)
+            ans = self.query_ollama(prompt, sys_prompt, num_predict=35, temperature=0.75, top_k=60)
             if ans:
                 cleaned = self.clean_human_response(ans, max_words=10, strip_setup=pun_setup)
                 if cleaned and cleaned not in candidates:
@@ -365,17 +372,12 @@ class BotEngine:
             ["Slow Wi-Fi", "Loud chewing", "Long lines"]
         ]))
 
-    def generate_dynamic_captcha_prompt(self) -> dict:
+    def generate_dynamic_captcha_prompt(self, seed_subject: Optional[str] = None) -> dict:
         """
         Dynamically generates a fresh CAPTCHA prompt on the fly using Ollama,
         intermixing common CAPTCHA subjects with descriptive COCO terms (colors, objects, actions, locations).
         Falls back to a procedural COCO mix if Ollama is offline or times out.
         """
-        CAPTCHA_OBJECTS = [
-            "fire hydrant", "school bus", "red car", "bicycle", "motorcycle",
-            "traffic light", "stop sign", "cat", "dog", "cow", "bear",
-            "slice of pizza", "boat", "train", "bench", "crosswalk", "umbrella"
-        ]
         COCO_COLORS = ["red", "yellow", "blue", "green", "orange", "black", "white", "brown"]
         COCO_ACTIONS = [
             "parked next to", "stopped near", "sitting beside", "standing in front of",
@@ -386,7 +388,8 @@ class BotEngine:
             "a tree in the park", "a sunny street", "a road near a building"
         ]
 
-        seed_subject = random.choice(CAPTCHA_OBJECTS)
+        if not seed_subject:
+            seed_subject = random.choice(CAPTCHA_OBJECTS)
         prompt_builder = (
             f"You are designing a prompt for an image generator in a party game. "
             f"Write a simple, concrete 1-sentence scene description (8 to 14 words) featuring a {seed_subject}. "
