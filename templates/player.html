@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 
 {% block title %}Bot or Not - Player Controller{% endblock %}
+{% block body_class %}player-screen{% endblock %}
 
 {% block content %}
 <div class="mobile-container">
-    <div class="mobile-header">
+    <div class="mobile-header" id="mobile-header">
         <div class="terminal-sys-badge" style="font-size: 0.72rem; margin-bottom: 3px;">
             <span class="term-status-dot"></span>PORTAL_TERMINAL // CLIENT_LINK
         </div>
@@ -68,12 +69,12 @@
             <form id="submitting-form" onsubmit="handleResponseFormSubmit(event)">
                 <!-- Single text input form -->
                 <div id="input-single-container" style="margin-top: 14px;">
-                    <textarea id="single-response-input" name="single_response" rows="3" placeholder=">> Type response here..." maxlength="140" autocapitalize="sentences" autocorrect="on" autocomplete="off" spellcheck="true" enterkeyhint="send"></textarea>
+                    <textarea id="single-response-input" name="single_response" rows="3" placeholder=">> Type response here..." maxlength="140" autofocus autocapitalize="sentences" autocorrect="on" autocomplete="off" spellcheck="true" enterkeyhint="send"></textarea>
                 </div>
 
                 <!-- 3-field input for Survey Says -->
                 <div id="input-multi-container" style="display: none; margin-top: 14px;">
-                    <input type="text" id="survey-input-1" name="survey_answer_1" placeholder=">> Top Answer #1" maxlength="60" autocapitalize="sentences" autocorrect="on" autocomplete="off" spellcheck="true" enterkeyhint="next">
+                    <input type="text" id="survey-input-1" name="survey_answer_1" placeholder=">> Top Answer #1" maxlength="60" autofocus autocapitalize="sentences" autocorrect="on" autocomplete="off" spellcheck="true" enterkeyhint="next">
                     <input type="text" id="survey-input-2" name="survey_answer_2" placeholder=">> Top Answer #2" maxlength="60" autocapitalize="sentences" autocorrect="on" autocomplete="off" spellcheck="true" enterkeyhint="next">
                     <input type="text" id="survey-input-3" name="survey_answer_3" placeholder=">> Top Answer #3" maxlength="60" autocapitalize="sentences" autocorrect="on" autocomplete="off" spellcheck="true" enterkeyhint="send">
                 </div>

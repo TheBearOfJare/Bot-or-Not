@@ -5,12 +5,14 @@
 // 2. Sample-accurate MP3 silence trimming: removes encoder delay (1000-1280 frames) and
 //    trailing padding to eliminate the repeat delay/stutter on looping.
 // 3. Dynamic Stem Crossfading:
-//    - INSTRUCTIONS & SUBMITTING (Answering): Chill stem
-//    - VOTING: Escalating stem (synchronized on exact loop beat)
+//    - INSTRUCTIONS & SUBMITTING (Answering): Chill stem (50% lower volume)
+//    - VOTING: Escalating stem (25% lower volume, synchronized on exact loop beat)
 //    - REVEAL: Energy stem (synchronized on exact loop beat)
 //    - SCOREBOARD: Empty / silence (reserved for future custom rankings audio)
 // 4. Dramatic silence beat: Waits after fading out Main theme before fading in Chill BGM.
 // 5. Host device ONLY (no audio on player controllers).
+// 6. Balanced mix multipliers: Chill is 50% lower (0.50x) and Escalation is 25% lower (0.75x)
+//    regardless of the user's master volume setting.
 
 class BGMManager {
     constructor() {
@@ -48,15 +50,35 @@ class BGMManager {
 
         this.activeTrack = "none";    // "main", "chill", "escalation", "energy", "silent"
         this.targetTrack = "main";
-        this.activeNodes = [];        // active { source, gain }
+        this.activeNodes = [];        // active { source, gain, track }
         this.activeFadeTimeout = null;
         this.chillDelayTimeout = null;
+
+        // Relative mix adjustments:
+        // Chill is 50% lower (-50% -> 0.50x), Escalation is 25% lower (-25% -> 0.75x)
+        this.trackMultipliers = {
+            main: 1.0,
+            energy: 0.5,
+            chill: 0.5,
+            escalation: 0.5
+        };
 
         const savedVol = localStorage.getItem("bot_bgm_volume");
         this.volume = savedVol !== null ? Math.max(0.05, Math.min(1.0, parseFloat(savedVol))) : 0.7;
         this.isMuted = localStorage.getItem("bot_bgm_muted") === "true";
 
         this.currentPhase = "LOBBY";
+
+        // 130 BPM Beat Tracking & Host Screen Border Pulse Sync
+        this.bpm = 130;
+        this.beatDuration = 60 / 130; // 0.46153846s @ 130 BPM
+        this.beatZeroTime = 0;
+        this.isBeatActive = false;
+
+        if (typeof document !== "undefined") {
+            document.documentElement.style.setProperty("--host-beat-duration", `${(60 / 130).toFixed(6)}s`);
+            document.documentElement.style.setProperty("--host-beat-duration-double", `${(120 / 130).toFixed(6)}s`);
+        }
 
         // Pre-fetch raw array buffers via standard HTTP (network only, 0 audio API calls)
         this.prefetchAudioData();
@@ -293,6 +315,15 @@ class BGMManager {
         this.equalizeStemBuffers();
     }
 
+    getTrackMultiplier(trackName) {
+        if (!trackName) return 1.0;
+        const key = String(trackName).toLowerCase();
+        if (Object.prototype.hasOwnProperty.call(this.trackMultipliers, key)) {
+            return this.trackMultipliers[key];
+        }
+        return 1.0;
+    }
+
     applyGainVolume(rampTime = 0.2) {
         const effVol = this.isMuted ? 0 : this.volume;
         if (this.ctx && this.masterGain) {
@@ -301,6 +332,7 @@ class BGMManager {
             this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, now);
             this.masterGain.gain.linearRampToValueAtTime(effVol, now + rampTime);
         }
+        this.updateBeatPulseState();
     }
 
     stopActiveNodes(fadeDuration = 0.35) {
@@ -309,7 +341,10 @@ class BGMManager {
             this.activeFadeTimeout = null;
         }
 
-        if (this.activeNodes.length === 0) return;
+        if (this.activeNodes.length === 0) {
+            this.updateBeatPulseState();
+            return;
+        }
 
         const nodesToStop = [...this.activeNodes];
         this.activeNodes = [];
@@ -327,6 +362,8 @@ class BGMManager {
             });
         }
 
+        this.updateBeatPulseState();
+
         this.activeFadeTimeout = setTimeout(() => {
             nodesToStop.forEach(({ source, gain }) => {
                 try {
@@ -337,6 +374,7 @@ class BGMManager {
                     if (gain) gain.disconnect();
                 } catch (e) {}
             });
+            this.updateBeatPulseState();
         }, Math.max(50, (fadeDuration * 1000) + 40));
     }
 
@@ -364,6 +402,7 @@ class BGMManager {
         if (this.buffers.intro && this.buffers.loop) {
             try {
                 const now = this.ctx.currentTime + 0.05;
+                this.beatZeroTime = now;
 
                 const introNode = this.ctx.createBufferSource();
                 introNode.buffer = this.buffers.intro;
@@ -372,9 +411,10 @@ class BGMManager {
                 loopNode.buffer = this.buffers.loop;
                 loopNode.loop = true;
 
+                const targetGain = this.getTrackMultiplier("main");
                 const trackGain = this.ctx.createGain();
                 trackGain.gain.setValueAtTime(0.001, now);
-                trackGain.gain.linearRampToValueAtTime(1.0, now + 0.4);
+                trackGain.gain.linearRampToValueAtTime(targetGain, now + 0.4);
 
                 introNode.connect(trackGain);
                 loopNode.connect(trackGain);
@@ -388,26 +428,31 @@ class BGMManager {
                     try { introNode.disconnect(); } catch (e) {}
                 };
 
-                this.activeNodes.push({ source: introNode, gain: trackGain }, { source: loopNode, gain: trackGain });
+                this.activeNodes.push({ source: introNode, gain: trackGain, track: "main" }, { source: loopNode, gain: trackGain, track: "main" });
+                this.updateBeatPulseState();
             } catch (err) {
                 console.warn("[BGMManager] Error playing main track:", err);
             }
         } else if (this.buffers.loop) {
             try {
                 const now = this.ctx.currentTime + 0.05;
+                this.beatZeroTime = now;
+
                 const loopNode = this.ctx.createBufferSource();
                 loopNode.buffer = this.buffers.loop;
                 loopNode.loop = true;
 
+                const targetGain = this.getTrackMultiplier("main");
                 const trackGain = this.ctx.createGain();
                 trackGain.gain.setValueAtTime(0.001, now);
-                trackGain.gain.linearRampToValueAtTime(1.0, now + 0.4);
+                trackGain.gain.linearRampToValueAtTime(targetGain, now + 0.4);
 
                 loopNode.connect(trackGain);
                 trackGain.connect(this.bgmGain);
 
                 loopNode.start(now);
-                this.activeNodes.push({ source: loopNode, gain: trackGain });
+                this.activeNodes.push({ source: loopNode, gain: trackGain, track: "main" });
+                this.updateBeatPulseState();
             } catch (err) {
                 console.warn("[BGMManager] Error playing loop-only main track:", err);
             }
@@ -444,9 +489,11 @@ class BGMManager {
             const elapsed = now - this.loopStartTime;
             offset = ((elapsed % this.loopDuration) + this.loopDuration) % this.loopDuration;
             offset = Math.max(0, Math.min(buffer.duration - 0.02, offset));
+            this.beatZeroTime = now - offset;
         } else {
             this.loopStartTime = now;
             offset = 0;
+            this.beatZeroTime = now;
         }
 
         this.stopActiveNodes(0.35);
@@ -457,15 +504,17 @@ class BGMManager {
             stemNode.buffer = buffer;
             stemNode.loop = true;
 
+            const targetGain = this.getTrackMultiplier(stemName);
             const stemGain = this.ctx.createGain();
             stemGain.gain.setValueAtTime(0.001, now);
-            stemGain.gain.linearRampToValueAtTime(1.0, now + 0.35);
+            stemGain.gain.linearRampToValueAtTime(targetGain, now + 0.35);
 
             stemNode.connect(stemGain);
             stemGain.connect(this.bgmGain);
 
             stemNode.start(now, offset);
-            this.activeNodes.push({ source: stemNode, gain: stemGain });
+            this.activeNodes.push({ source: stemNode, gain: stemGain, track: stemName });
+            this.updateBeatPulseState();
         } catch (err) {
             console.warn(`[BGMManager] Error playing stem ${stemName}:`, err);
         }
@@ -479,10 +528,12 @@ class BGMManager {
         }
 
         if (this.activeTrack === "silent" && this.activeNodes.length === 0) {
+            this.updateBeatPulseState();
             return;
         }
         this.activeTrack = "silent";
         this.stopActiveNodes(fadeDuration);
+        this.updateBeatPulseState();
     }
 
     /**
@@ -523,7 +574,7 @@ class BGMManager {
                         if (["INSTRUCTIONS", "SUBMITTING"].includes(this.currentPhase)) {
                             this.playStem("chill");
                         }
-                    }, 1400); // 450ms fade + 950ms silence pause
+                    }, 2000); // 450ms fade + 1550ms silence pause
                 } else if (this.activeTrack === "silent") {
                     // Coming from scoreboard: brief breathing beat then chill
                     this.targetTrack = "chill";
@@ -607,6 +658,26 @@ class BGMManager {
 
         this.applyGainVolume(0.15);
         this.updateUi();
+        this.updateBeatPulseState();
+    }
+
+    setVolume(vol) {
+        if (!this.isStarted) {
+            this.startFromUserGesture();
+        }
+        const val = parseFloat(vol);
+        if (isNaN(val) || val <= 0.001) {
+            this.isMuted = true;
+        } else {
+            this.isMuted = false;
+            this.volume = Math.max(0.05, Math.min(1.0, val));
+        }
+        localStorage.setItem("bot_bgm_volume", this.volume.toFixed(2));
+        localStorage.setItem("bot_bgm_muted", this.isMuted ? "true" : "false");
+
+        this.applyGainVolume(0.15);
+        this.updateUi();
+        this.updateBeatPulseState();
     }
 
     updateUi() {
@@ -635,6 +706,78 @@ class BGMManager {
             if (iconEl) iconEl.innerHTML = iconSvg;
             if (labelEl) labelEl.innerText = `BGM: ${pct}%`;
             if (btn) btn.classList.remove("btn-muted");
+        }
+    }
+
+    /**
+     * Beat Synchronization & Pulse Phase Alignment (Host Screen Only)
+     * Calculates the sample-accurate position within the 130 BPM quarter-note beat grid
+     * and sets --host-beat-delay on the document root so CSS border pulse animations
+     * are synchronized on the downbeat of the audio.
+     */
+    syncBeatPhase() {
+        if (!this.ctx || !this.beatZeroTime) return;
+
+        const now = this.ctx.currentTime;
+        const elapsed = now - this.beatZeroTime;
+        if (elapsed < 0) {
+            // Audio starts scheduled slightly in the future (e.g. +0.04s)
+            const ms = Math.max(10, Math.round(-elapsed * 1000));
+            setTimeout(() => {
+                if (this.isBeatActive) this.syncBeatPhase();
+            }, ms);
+            return;
+        }
+
+        const beatLen = 60 / this.bpm; // 0.46153846s @ 130 BPM
+        const offset = ((elapsed % beatLen) + beatLen) % beatLen;
+        const targetDelay = -offset;
+
+        document.documentElement.style.setProperty("--host-beat-delay", `${targetDelay.toFixed(4)}s`);
+    }
+
+    /**
+     * Toggles the subtle rhythmic border pulse on host screen according to whether
+     * tracks are actively playing and audible.
+     */
+    updateBeatPulseState() {
+        if (typeof document === "undefined") return;
+
+        // Ensure this effect is strictly host-screen only
+        const isHost = document.body && (
+            document.body.classList.contains("host-screen") ||
+            document.querySelector(".host-container") ||
+            document.getElementById("host-title-screen")
+        );
+        if (!isHost) return;
+
+        // Guarantee host-screen class is present on host body
+        if (document.body && !document.body.classList.contains("host-screen")) {
+            document.body.classList.add("host-screen");
+        }
+
+        const isPlaying = this.isStarted &&
+                          this.ctx &&
+                          this.ctx.state === "running" &&
+                          !this.isMuted &&
+                          this.volume > 0.01 &&
+                          ["main", "chill", "escalation", "energy"].includes(this.activeTrack) &&
+                          this.activeNodes.length > 0;
+
+        if (isPlaying) {
+            if (!this.isBeatActive) {
+                this.isBeatActive = true;
+                this.syncBeatPhase();
+                document.body.classList.add("host-beat-active");
+            } else {
+                // If already active and transitioning tracks, update delay once
+                this.syncBeatPhase();
+            }
+        } else {
+            if (this.isBeatActive) {
+                this.isBeatActive = false;
+                document.body.classList.remove("host-beat-active");
+            }
         }
     }
 

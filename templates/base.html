@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/static/css/style.css?v={{ v }}">
     {% block head %}{% endblock %}
 </head>
-<body class="terminal-theme">
+<body class="terminal-theme {% block body_class %}{% endblock %}">
     {% block content %}{% endblock %}
     <script src="/static/js/icons.js?v={{ v }}"></script>
     {% block scripts %}{% endblock %}

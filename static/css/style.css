@@ -1259,3 +1259,79 @@ input[type="text"]:focus, textarea:focus, select:focus {
         border-color: #33f3ff;
     }
 }
+
+/* ==========================================================================
+   Host Screen 130 BPM Rhythmic QR Code Pulse (Host-Only)
+   Synchronized to audio downbeat of 130 BPM music tracks
+   - Applied ONLY to the QR code module
+   - Physical vector boundary lines expanding far outward (28px)
+   - Dual staggered waves each lasting 2 full beats (0.923077s)
+   ========================================================================== */
+
+:root {
+    --host-beat-duration: 0.461538s;
+    --host-beat-duration-double: 0.923077s;
+    --host-beat-delay: 0s;
+}
+
+/* Ensure .qr-container is positioned relative and doesn't clip children */
+.qr-container {
+    position: relative;
+    overflow: visible;
+}
+
+/* Staggered Physical Shockwave Lines on QR Code */
+body.host-screen.host-beat-active .qr-container::before,
+body.host-screen.host-beat-active .qr-container::after {
+    content: "";
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    bottom: -1px;
+    left: -1px;
+    border: 1.5px solid var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+    background: transparent;
+    pointer-events: none;
+    z-index: 1;
+    will-change: top, right, bottom, left, opacity;
+}
+
+body.host-screen.host-beat-active .qr-container::before {
+    animation: qrBeatWave var(--host-beat-duration-double, 0.923077s) infinite cubic-bezier(0.1, 0.75, 0.35, 1);
+    animation-delay: var(--host-beat-delay, 0s);
+}
+
+body.host-screen.host-beat-active .qr-container::after {
+    animation: qrBeatWave var(--host-beat-duration-double, 0.923077s) infinite cubic-bezier(0.1, 0.75, 0.35, 1);
+    animation-delay: calc(var(--host-beat-delay, 0s) - var(--host-beat-duration, 0.461538s));
+}
+
+@keyframes qrBeatWave {
+    0% {
+        top: -1px;
+        right: -1px;
+        bottom: -1px;
+        left: -1px;
+        opacity: 0.6;
+    }
+    70% {
+        opacity: 0.15;
+    }
+    100% {
+        top: -18px;
+        right: -18px;
+        bottom: -18px;
+        left: -18px;
+        opacity: 0;
+    }
+}
+
+/* Accessibility: Disable motion when user requests it */
+@media (prefers-reduced-motion: reduce) {
+    body.host-screen.host-beat-active .qr-container::before,
+    body.host-screen.host-beat-active .qr-container::after {
+        animation: none !important;
+        display: none !important;
+    }
+}

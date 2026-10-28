@@ -87,6 +87,8 @@ document.addEventListener("DOMContentLoaded", () => {
         startPolling();
     } else {
         showScreen("screen-join");
+        const nameInput = document.getElementById("player-name-input");
+        if (nameInput) setTimeout(() => nameInput.focus(), 60);
     }
 });
 
@@ -99,6 +101,15 @@ function showScreen(screenId) {
         const el = document.getElementById(s);
         if (el) el.style.display = (s === screenId) ? "block" : "none";
     });
+
+    const mobileHeader = document.getElementById("mobile-header");
+    if (mobileHeader) {
+        if (screenId === "screen-submitting" || screenId === "screen-voting") {
+            mobileHeader.style.display = "none";
+        } else {
+            mobileHeader.style.display = "";
+        }
+    }
 }
 
 async function handleJoin(e) {
@@ -514,6 +525,22 @@ function initInputListeners() {
     window.addEventListener("pagehide", flushDraftNow);
 }
 
+function autoFocusSubmissionInput() {
+    setTimeout(() => {
+        if (currentPhaseCached !== "SUBMITTING") return;
+        const target = (currentPromptType === "multi_field")
+            ? document.getElementById("survey-input-1")
+            : document.getElementById("single-response-input");
+        if (target && typeof target.focus === "function") {
+            target.focus();
+            if (target.value && typeof target.setSelectionRange === "function") {
+                const len = target.value.length;
+                target.setSelectionRange(len, len);
+            }
+        }
+    }, 60);
+}
+
 // --- Submitting Phase ---
 function renderSubmittingScreen(state, isPromptChanged) {
     showScreen("screen-submitting");
@@ -612,6 +639,10 @@ function renderSubmittingScreen(state, isPromptChanged) {
         multiBox.style.display = "none";
         captchaBox.style.display = "none";
         document.getElementById("single-response-input").placeholder = promptData.placeholder || "Type here...";
+    }
+
+    if (isPromptChanged) {
+        autoFocusSubmissionInput();
     }
 }
 
