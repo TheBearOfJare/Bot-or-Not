@@ -116,7 +116,7 @@ class GameManager:
         elif self.phase == "SUBMITTING":
             timeout = self.current_submission_timeout
         elif self.phase == "INTRO":
-            timeout = getattr(self.config, "INTRO_TIMEOUT", 32)
+            timeout = getattr(self.config, "INTRO_TIMEOUT", 45)
         elif self.phase == "INSTRUCTIONS":
             timeout = getattr(self.config, "INSTRUCTIONS_TIMEOUT", 8)
         elif self.phase == "SCOREBOARD":
@@ -678,7 +678,7 @@ class GameManager:
 
         if self.phase == "INTRO":
             base_state["intro_text"] = self.get_intro_text()
-            base_state["intro_timeout"] = getattr(self.config, "INTRO_TIMEOUT", 32)
+            base_state["intro_timeout"] = getattr(self.config, "INTRO_TIMEOUT", 45)
 
         # Submissions status
         if self.phase == "SUBMITTING" and self.current_game:

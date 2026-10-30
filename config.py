@@ -74,8 +74,8 @@ class Config:
     VOTING_TIME_PER_RESPONSE = int(os.getenv("VOTING_TIME_PER_RESPONSE", 10))    # 10s per response submitted for voting (6 answers = 1 min)
     VOTING_TIME_PER_RESPONSE_SURVEY = int(os.getenv("VOTING_TIME_PER_RESPONSE_SURVEY", 15)) # 15s per response submitted for Survey Says voting
     VOTING_TIMEOUT = int(os.getenv("VOTING_TIMEOUT", 30))                         # Fallback default voting timeout
-    INTRO_TIMEOUT = 32                # Game orientation / voicelines briefing display time
-    INSTRUCTIONS_TIMEOUT = 8          # Instructions display time
+    INTRO_TIMEOUT = int(os.getenv("INTRO_TIMEOUT", 60))                # Game orientation / voicelines briefing display time
+    INSTRUCTIONS_TIMEOUT = 15          # Instructions display time
     REVEAL_TIMEOUT = 10               # Reveal phase display time
     SCOREBOARD_TIMEOUT = 8            # Scoreboard intermission time
 

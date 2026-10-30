@@ -31,6 +31,9 @@ function typeTerminalText(element, text, options = {}) {
     const speed = options.speed || 16;
     const showCursor = options.cursor !== false;
     const onComplete = options.onComplete || null;
+    const commaPause = typeof options.commaPause === "number" ? options.commaPause : 250;
+    const periodPause = typeof options.periodPause === "number" ? options.periodPause : 1000;
+    const questionPause = typeof options.questionPause === "number" ? options.questionPause : 1000;
 
     if (element._termTimer) {
         clearTimeout(element._termTimer);
@@ -64,7 +67,19 @@ function typeTerminalText(element, text, options = {}) {
                 element.appendChild(textNode);
             }
             const jitter = Math.floor(Math.random() * 6) - 3;
-            element._termTimer = setTimeout(nextChar, Math.max(6, speed + jitter));
+            let delay = Math.max(6, speed + jitter);
+            if (char === ",") {
+                delay = commaPause;
+            } else if (char === ".") {
+                if (charIndex >= text.length || text.charAt(charIndex) !== ".") {
+                    delay = periodPause;
+                }
+            } else if (char === "?") {
+                if (charIndex >= text.length || text.charAt(charIndex) !== "?") {
+                    delay = questionPause;
+                }
+            }
+            element._termTimer = setTimeout(nextChar, delay);
         } else {
             element._termTimer = null;
             if (options.removeCursorAfter) {
