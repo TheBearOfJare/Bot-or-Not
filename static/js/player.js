@@ -1100,14 +1100,32 @@ function startMobileTimer(seconds, elementId, timeoutCallback) {
     const el = document.getElementById(elementId);
     if (el) el.innerText = playerCountdownSeconds;
 
+    const timerBox = el ? el.closest(".timer-pill") : null;
+    if (timerBox) {
+        if (playerCountdownSeconds < 5 && playerCountdownSeconds > 0) {
+            timerBox.classList.add("urgent");
+        } else {
+            timerBox.classList.remove("urgent");
+        }
+    }
+
     playerCountdown = setInterval(() => {
         if (isMobilePaused) {
             return;
         }
         playerCountdownSeconds -= 1;
-        if (el) el.innerText = Math.max(0, playerCountdownSeconds);
+        const curSec = Math.max(0, playerCountdownSeconds);
+        if (el) el.innerText = curSec;
+        if (timerBox) {
+            if (curSec < 5 && curSec > 0) {
+                timerBox.classList.add("urgent");
+            } else {
+                timerBox.classList.remove("urgent");
+            }
+        }
         if (playerCountdownSeconds <= 0) {
             clearInterval(playerCountdown);
+            if (timerBox) timerBox.classList.remove("urgent");
             if (timeoutCallback) timeoutCallback();
         }
     }, 1000);

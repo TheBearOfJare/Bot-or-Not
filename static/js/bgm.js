@@ -75,6 +75,13 @@ class BGMManager {
         this.beatZeroTime = 0;
         this.isBeatActive = false;
 
+        // Sub 5-Second Timer Warning Beep Subsystem (Key of C minor -> G dominant @ 130 BPM)
+        this.isTimerWarningActive = false;
+        this.warningScheduleTimer = null;
+        this.nextWarningBeatTime = 0;
+        this.activeWarningGainNodes = [];
+        this.activeWarningNodes = [];
+
         if (typeof document !== "undefined") {
             document.documentElement.style.setProperty("--host-beat-duration", `${(60 / 130).toFixed(6)}s`);
             document.documentElement.style.setProperty("--host-beat-duration-double", `${(120 / 130).toFixed(6)}s`);
@@ -521,6 +528,7 @@ class BGMManager {
     }
 
     stopBGM(fadeDuration = 0.4) {
+        this.stopTimerWarning();
         this.targetTrack = "silent";
         if (this.chillDelayTimeout) {
             clearTimeout(this.chillDelayTimeout);
@@ -551,6 +559,10 @@ class BGMManager {
         if (!this.isStarted) return; // Wait until host clicks start on Title Screen
 
         const normalized = phase.toUpperCase();
+
+        if (!["SUBMITTING", "VOTING"].includes(normalized)) {
+            this.stopTimerWarning();
+        }
 
         switch (normalized) {
             case "LOBBY":
@@ -778,6 +790,166 @@ class BGMManager {
                 this.isBeatActive = false;
                 document.body.classList.remove("host-beat-active");
             }
+        }
+    }
+
+    /**
+     * Countdown Timer Warning Subsystem:
+     * - Triggers when timers for player action phases (SUBMITTING & VOTING) drop below 5 seconds.
+     * - Musical Key: C minor; uses note G (dominant 5th degree).
+     * - Dual-oscillator warm synthesis: pure sine at G5 (783.99 Hz) for clear acoustic presence,
+     *   plus G4 (392.00 Hz) sub-octave fundamental for body and warmth.
+     * - Zero harshness: smooth 8ms linear attack avoids onset transients/clicks, followed by
+     *   a natural 140ms exponential decay down to silence (150ms total length within 461.5ms beat period).
+     * - Sample-accurate lookahead scheduling synchronized with the 130 BPM BGM beat grid (this.beatZeroTime).
+     * - Routed directly through this.masterGain so host volume slider and mute controls apply seamlessly.
+     */
+    startTimerWarning() {
+        if (this.isTimerWarningActive) return;
+        if (!this.ctx) return;
+        if (this.ctx.state === "suspended") {
+            try { this.ctx.resume(); } catch (e) {}
+        }
+
+        this.isTimerWarningActive = true;
+
+        const now = this.ctx.currentTime;
+        let nextBeat;
+
+        if (this.beatZeroTime && this.beatZeroTime > 0) {
+            const beatLen = this.beatDuration; // 60 / 130 = 0.461538s @ 130 BPM
+            const elapsed = now - this.beatZeroTime;
+            const currentBeatIndex = Math.ceil(elapsed / beatLen);
+            nextBeat = this.beatZeroTime + (currentBeatIndex * beatLen);
+            // If the next beat is too close (less than 18ms), schedule on the subsequent beat
+            if (nextBeat < now + 0.018) {
+                nextBeat += beatLen;
+            }
+        } else {
+            nextBeat = now + 0.04;
+        }
+
+        this.nextWarningBeatTime = nextBeat;
+
+        // Schedule immediate beat window and start short lookahead ticker
+        this.scheduleWarningBeeps();
+        if (!this.warningScheduleTimer) {
+            this.warningScheduleTimer = setInterval(() => {
+                this.scheduleWarningBeeps();
+            }, 35);
+        }
+    }
+
+    scheduleWarningBeeps() {
+        if (!this.isTimerWarningActive || !this.ctx || this.ctx.state !== "running") {
+            return;
+        }
+
+        const now = this.ctx.currentTime;
+        const lookahead = 0.12; // 120ms lookahead window
+        const beatLen = this.beatDuration;
+
+        while (this.nextWarningBeatTime < now + lookahead) {
+            if (this.nextWarningBeatTime >= now - 0.015) {
+                this.playWarningBeep(this.nextWarningBeatTime);
+            }
+            this.nextWarningBeatTime += beatLen;
+        }
+    }
+
+    playWarningBeep(time) {
+        if (!this.ctx || !this.masterGain || this.isMuted) return;
+
+        try {
+            const now = this.ctx.currentTime;
+            const targetTime = Math.max(now + 0.005, time);
+
+            // Primary chime: G5 (783.99 Hz, 5th degree / dominant of C minor)
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(783.99, targetTime);
+
+            // Smooth envelope: 8ms attack (no onset pop), 140ms exponential decay (non-harsh, bell-like)
+            const peakGain = 0.32;
+            gain.gain.setValueAtTime(0.0001, targetTime);
+            gain.gain.linearRampToValueAtTime(peakGain, targetTime + 0.008);
+            gain.gain.exponentialRampToValueAtTime(0.0001, targetTime + 0.15);
+
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+
+            osc.start(targetTime);
+            osc.stop(targetTime + 0.16);
+
+            // Subtle warm harmonic underlay: G4 (392.00 Hz) to give body and fullness without harshness
+            const oscWarm = this.ctx.createOscillator();
+            const warmGain = this.ctx.createGain();
+
+            oscWarm.type = "sine";
+            oscWarm.frequency.setValueAtTime(392.00, targetTime);
+
+            const warmPeak = 0.10;
+            warmGain.gain.setValueAtTime(0.0001, targetTime);
+            warmGain.gain.linearRampToValueAtTime(warmPeak, targetTime + 0.008);
+            warmGain.gain.exponentialRampToValueAtTime(0.0001, targetTime + 0.15);
+
+            oscWarm.connect(warmGain);
+            warmGain.connect(this.masterGain);
+
+            oscWarm.start(targetTime);
+            oscWarm.stop(targetTime + 0.16);
+
+            // Track active warning gain and oscillator nodes for rapid cutoff on cancel/pause
+            if (!this.activeWarningGainNodes) this.activeWarningGainNodes = [];
+            this.activeWarningGainNodes.push(gain, warmGain);
+
+            if (!this.activeWarningNodes) this.activeWarningNodes = [];
+            this.activeWarningNodes.push(osc, oscWarm);
+
+            setTimeout(() => {
+                if (this.activeWarningGainNodes) {
+                    this.activeWarningGainNodes = this.activeWarningGainNodes.filter(g => g !== gain && g !== warmGain);
+                }
+                if (this.activeWarningNodes) {
+                    this.activeWarningNodes = this.activeWarningNodes.filter(o => o !== osc && o !== oscWarm);
+                }
+            }, 250);
+        } catch (e) {
+            console.warn("[BGMManager] Error playing warning beep:", e);
+        }
+    }
+
+    stopTimerWarning() {
+        this.isTimerWarningActive = false;
+
+        if (this.warningScheduleTimer) {
+            clearInterval(this.warningScheduleTimer);
+            this.warningScheduleTimer = null;
+        }
+
+        // Fast, smooth fade down on any currently ringing/scheduled beep nodes to prevent clicks
+        if (this.activeWarningGainNodes && this.activeWarningGainNodes.length > 0 && this.ctx) {
+            const now = this.ctx.currentTime;
+            this.activeWarningGainNodes.forEach(g => {
+                try {
+                    g.gain.cancelScheduledValues(now);
+                    g.gain.setValueAtTime(g.gain.value, now);
+                    g.gain.linearRampToValueAtTime(0.0001, now + 0.015);
+                } catch (e) {}
+            });
+            this.activeWarningGainNodes = [];
+        }
+
+        if (this.activeWarningNodes && this.activeWarningNodes.length > 0) {
+            const now = this.ctx ? this.ctx.currentTime : 0;
+            this.activeWarningNodes.forEach(node => {
+                try {
+                    node.stop(now + 0.02);
+                } catch (e) {}
+            });
+            this.activeWarningNodes = [];
         }
     }
 

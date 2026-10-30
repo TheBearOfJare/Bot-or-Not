@@ -131,6 +131,10 @@ function renderHostView(state) {
         currentRevealingKey = null;
     }
 
+    if (isPhaseChanged && !["SUBMITTING", "VOTING"].includes(state.phase)) {
+        checkTimerWarning(null, 0);
+    }
+
     switch (state.phase) {
         case "LOBBY":
             renderLobby(state);
@@ -350,7 +354,7 @@ function renderIntro(state, isNewPhase) {
     if (instEl && (isNewPhase || instEl.getAttribute("data-typed-text") !== introText)) {
         instEl.setAttribute("data-typed-text", introText);
         // Slower deliberate typewriter pace for orientation briefing
-        typeTerminalText(instEl, introText, { speed: 32, cursor: true });
+        typeTerminalText(instEl, introText, { speed: 38, cursor: true });
     }
 
     if (isNewPhase) {
@@ -1010,8 +1014,42 @@ function renderGameOver(state) {
 
 // --- Helpers & Timers ---
 
+let currentTimerElementId = null;
+
+function checkTimerWarning(elementId, curSec) {
+    const elId = elementId || currentTimerElementId;
+    const isPlayerActionTimer = (elId === "submitting-timer" || elId === "voting-timer");
+    const activePhase = currentState ? currentState.phase : null;
+    const isActionPhase = (activePhase === "SUBMITTING" || activePhase === "VOTING");
+
+    if (window.bgmManager) {
+        if (isPlayerActionTimer && isActionPhase && !isGamePaused && curSec < 5 && curSec > 0) {
+            if (typeof window.bgmManager.startTimerWarning === "function") {
+                window.bgmManager.startTimerWarning();
+            }
+        } else {
+            if (typeof window.bgmManager.stopTimerWarning === "function") {
+                window.bgmManager.stopTimerWarning();
+            }
+        }
+    }
+
+    const timerBoxId = (elId === "submitting-timer") ? "host-submitting-timer-box" : ((elId === "voting-timer") ? "host-voting-timer-box" : null);
+    if (timerBoxId) {
+        const timerBox = document.getElementById(timerBoxId);
+        if (timerBox) {
+            if (isPlayerActionTimer && isActionPhase && !isGamePaused && curSec < 5 && curSec > 0) {
+                timerBox.classList.add("urgent");
+            } else {
+                timerBox.classList.remove("urgent");
+            }
+        }
+    }
+}
+
 function startCountdown(seconds, elementId, callback) {
     clearInterval(countdownInterval);
+    currentTimerElementId = elementId;
     countdownSeconds = seconds;
     const el = document.getElementById(elementId);
     if (el) el.innerText = countdownSeconds;
@@ -1026,6 +1064,8 @@ function startCountdown(seconds, elementId, callback) {
         pauseBtn.style.cursor = "pointer";
     }
 
+    checkTimerWarning(elementId, countdownSeconds);
+
     countdownInterval = setInterval(() => {
         if (isGamePaused) {
             return;
@@ -1035,8 +1075,11 @@ function startCountdown(seconds, elementId, callback) {
         if (el) el.innerText = curSec;
         if (elementId === "reveal-timer" && bottomRev) bottomRev.innerText = curSec;
 
+        checkTimerWarning(elementId, curSec);
+
         if (countdownSeconds <= 0) {
             clearInterval(countdownInterval);
+            checkTimerWarning(elementId, 0);
             if (callback) callback();
         }
     }, 1000);
@@ -1064,6 +1107,8 @@ function updatePauseUi() {
         if (indicatorText) indicatorText.innerText = "AUTO-PILOT ENGAGED";
         document.querySelectorAll(".timer-pill").forEach(el => el.classList.remove("paused"));
     }
+
+    checkTimerWarning(currentTimerElementId, countdownSeconds);
 }
 
 async function togglePauseGame() {
@@ -1088,6 +1133,7 @@ async function togglePauseGame() {
 
 async function advancePhase() {
     clearInterval(countdownInterval);
+    checkTimerWarning(null, 0);
     clearRevealSequence();
     currentRevealingKey = null;
     isGamePaused = false;
@@ -1103,6 +1149,7 @@ async function advancePhase() {
 
 async function resetToLobby() {
     clearInterval(countdownInterval);
+    checkTimerWarning(null, 0);
     clearRevealSequence();
     currentRevealingKey = null;
     isGamePaused = false;

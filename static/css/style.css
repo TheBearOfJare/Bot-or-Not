@@ -1064,6 +1064,32 @@ input[type="text"]:focus, textarea:focus, select:focus {
     box-shadow: 0 0 16px var(--terminal-amber-dim) !important;
 }
 
+.timer-pill.urgent {
+    border-color: var(--terminal-red) !important;
+    color: #ff3366 !important;
+    background: #24050d !important;
+    box-shadow: 0 0 18px rgba(255, 34, 85, 0.45) !important;
+    animation: urgentTimerPulse var(--host-beat-duration, 0.461538s) infinite cubic-bezier(0.4, 0, 0.2, 1);
+    animation-delay: var(--host-beat-delay, 0s);
+}
+
+@keyframes urgentTimerPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    30% {
+        transform: scale(1.06);
+        box-shadow: 0 0 24px rgba(255, 34, 85, 0.65);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .timer-pill.urgent {
+        animation: none !important;
+        transform: none !important;
+    }
+}
+
 /* Mobile Player Specific */
 .mobile-header {
     text-align: center;
