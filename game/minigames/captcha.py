@@ -1,10 +1,10 @@
 import os
 import time
 import random
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from game.minigames.base import BaseMinigame
 from game.minigames.captcha_gen import CAPTCHA_SUBJECTS, create_captcha_asset, is_attngan_active
-from game.bot_engine import CAPTCHA_OBJECTS
+from game.bot_engine import CAPTCHA_OBJECTS, is_response_similar_to_any, GENERIC_CAPTCHA_FALLBACKS
 from game.prompt_tracker import prompt_tracker
 
 def clear_captcha_images(captchas_dir: Optional[str] = None) -> int:
@@ -109,36 +109,46 @@ class CaptchaCaptionGame(BaseMinigame):
     def _generate_bots(self):
         for q in self.questions:
             meta = q["meta"]
+            fallbacks = meta["subject"].get("fallbacks") if meta.get("subject") else None
+            img_path = meta.get("image_filepath", "")
+
+            if self.bot_engine:
+                captions = self.bot_engine.generate_coordinated_captcha_captions(
+                    image_path=img_path,
+                    bot_count=self.bot_count,
+                    fallback_answers=fallbacks
+                )
+            else:
+                captions = [self._get_fallback_response_for_question(q) for _ in range(self.bot_count)]
+
             for i in range(self.bot_count):
                 bot_id = f"bot_{i+1}"
-                bot_name = self.bot_engine.get_bot_display_name()
+                bot_name = self.bot_engine.get_bot_display_name() if self.bot_engine else "Bot"
                 if bot_id not in q["bot_ids"]:
                     q["bot_ids"].append(bot_id)
 
-                fallbacks = meta["subject"].get("fallbacks") if meta.get("subject") else None
-                caption = self.bot_engine.generate_captcha_caption(
-                    image_path=meta["image_filepath"],
-                    fallback_answers=fallbacks
-                )
-
+                resp = captions[i] if i < len(captions) else self._get_fallback_response_for_question(q)
                 sub_id = f"sub_{bot_id}"
                 q["submissions"][sub_id] = {
                     "id": sub_id,
                     "author_id": bot_id,
                     "author_name": bot_name,
                     "is_bot": True,
-                    "response": caption,
+                    "response": resp,
                     "is_locked": True,
                     "version": 0
                 }
 
-    def _get_fallback_response_for_question(self, q: Dict[str, Any]) -> str:
+    def _get_fallback_response_for_question(self, q: Dict[str, Any], avoid_responses: List[Any] = None) -> str:
         meta = q.get("meta", {})
         subject = meta.get("subject")
-        if subject and subject.get("fallbacks"):
-            chosen = random.choice(subject["fallbacks"])
-            return chosen[0].upper() + chosen[1:] if chosen else ""
-        return "Looks like a cat on a car"
+        fallbacks = subject.get("fallbacks") if subject else None
+        if self.bot_engine:
+            return self.bot_engine._pick_distinct_fallback(fallbacks, GENERIC_CAPTCHA_FALLBACKS, avoid=avoid_responses)
+
+        pool = [f for f in (fallbacks or GENERIC_CAPTCHA_FALLBACKS) if not is_response_similar_to_any(f, avoid_responses or [])]
+        chosen = random.choice(pool) if pool else random.choice(GENERIC_CAPTCHA_FALLBACKS)
+        return chosen[0].upper() + chosen[1:] if chosen else ""
 
     def _get_fallback_response(self) -> str:
-        return "Looks like a cat on a car"
+        return random.choice(GENERIC_CAPTCHA_FALLBACKS)

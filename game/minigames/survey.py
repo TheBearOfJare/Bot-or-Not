@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 from game.minigames.base import BaseMinigame
 from game.normalization import normalize_response
 from game.prompt_tracker import prompt_tracker
+from game.bot_engine import is_response_similar_to_any, GENERIC_SURVEY_FALLBACKS
 
 PROMPTS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "prompts", "survey.json"))
 
@@ -92,33 +93,61 @@ class SurveySaysGame(BaseMinigame):
     def _generate_bots(self):
         for q in self.questions:
             meta = q["meta"]
+            fallbacks = meta.get("fallbacks") if isinstance(meta, dict) else None
+            question = meta.get("question", "") if isinstance(meta, dict) else ""
+
+            if self.bot_engine:
+                answer_sets = self.bot_engine.generate_coordinated_survey_answers(
+                    survey_prompt=question,
+                    bot_count=self.bot_count,
+                    fallback_answers=fallbacks
+                )
+            else:
+                answer_sets = [self._get_fallback_response_for_question(q) for _ in range(self.bot_count)]
+
             for i in range(self.bot_count):
                 bot_id = f"bot_{i+1}"
-                bot_name = self.bot_engine.get_bot_display_name()
+                bot_name = self.bot_engine.get_bot_display_name() if self.bot_engine else "Bot"
                 if bot_id not in q["bot_ids"]:
                     q["bot_ids"].append(bot_id)
 
-                answers = self.bot_engine.generate_survey_answers(
-                    survey_prompt=meta["question"],
-                    fallback_answers=meta.get("fallbacks")
-                )
-
+                resp = answer_sets[i] if i < len(answer_sets) else self._get_fallback_response_for_question(q)
                 sub_id = f"sub_{bot_id}"
                 q["submissions"][sub_id] = {
                     "id": sub_id,
                     "author_id": bot_id,
                     "author_name": bot_name,
                     "is_bot": True,
-                    "response": answers,  # List of 3 strings
+                    "response": resp,  # List of 3 strings
                     "is_locked": True,
                     "version": 0
                 }
 
-    def _get_fallback_response_for_question(self, q: Dict[str, Any]) -> list:
+    def _get_fallback_response_for_question(self, q: Dict[str, Any], avoid_responses: List[Any] = None) -> list:
         meta = q.get("meta", {})
         fallbacks = meta.get("fallbacks") if isinstance(meta, dict) else None
+        question = meta.get("question", "") if isinstance(meta, dict) else ""
+        if self.bot_engine:
+            flat_avoid = []
+            if avoid_responses:
+                for r in avoid_responses:
+                    if isinstance(r, list):
+                        flat_avoid.extend(r)
+                    elif isinstance(r, str):
+                        flat_avoid.append(r)
+            return self.bot_engine._pick_distinct_survey_items(3, fallbacks=fallbacks, avoid=flat_avoid, prompt_context=question)
+
+        flat_avoid = []
+        if avoid_responses:
+            for r in avoid_responses:
+                if isinstance(r, list):
+                    flat_avoid.extend(r)
+                elif isinstance(r, str):
+                    flat_avoid.append(r)
         if fallbacks and len(fallbacks) >= 3:
-            return random.sample(fallbacks, 3)
+            available = [f for f in fallbacks if not is_response_similar_to_any(f, flat_avoid, prompt_context=question)]
+            if len(available) >= 3:
+                return random.sample(available, 3)
         return list(random.choice(GENERIC_SURVEY_FALLBACKS))
 
     def _get_fallback_response(self) -> list:

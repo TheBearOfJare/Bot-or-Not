@@ -70,7 +70,7 @@ class Config:
 
     # Timers (in seconds)
     SUBMISSION_TIMEOUT = int(os.getenv("SUBMISSION_TIMEOUT", 35))                 # Limited time to answer in each minigame (35s)
-    SUBMISSION_TIMEOUT_SURVEY = int(os.getenv("SUBMISSION_TIMEOUT_SURVEY", 45))   # Extended time for Survey Says (3 answers) (45s)
+    SUBMISSION_TIMEOUT_SURVEY = int(os.getenv("SUBMISSION_TIMEOUT_SURVEY", 60))   # Extended time for Survey Says (3 answers) (45s)
     VOTING_TIME_PER_RESPONSE = int(os.getenv("VOTING_TIME_PER_RESPONSE", 10))    # 10s per response submitted for voting (6 answers = 1 min)
     VOTING_TIME_PER_RESPONSE_SURVEY = int(os.getenv("VOTING_TIME_PER_RESPONSE_SURVEY", 15)) # 15s per response submitted for Survey Says voting
     VOTING_TIMEOUT = int(os.getenv("VOTING_TIMEOUT", 30))                         # Fallback default voting timeout

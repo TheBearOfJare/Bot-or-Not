@@ -91,12 +91,12 @@ class BaseMinigame:
         """Override in subclass to return a random fallback answer."""
         return "Ran out of time"
 
-    def _get_fallback_response_for_question(self, q: Dict[str, Any]) -> Any:
-        """Override in subclass to return a random fallback answer for a specific question."""
+    def _get_fallback_response_for_question(self, q: Dict[str, Any], avoid_responses: List[Any] = None) -> Any:
+        """Override in subclass to return a random fallback answer for a specific question, avoiding duplicate/similar answers."""
         return self._get_fallback_response()
 
     def ensure_bot_fallbacks(self):
-        """Guarantees that all required bot submissions exist before voting starts."""
+        """Guarantees that all required bot submissions exist before voting starts, with no duplicate or similar answers."""
         with self._lock:
             for q in self.questions:
                 q_submissions = q["submissions"]
@@ -107,7 +107,11 @@ class BaseMinigame:
                         q_bot_ids.append(bot_id)
                     sub_id = f"sub_{bot_id}"
                     if sub_id not in q_submissions:
-                        fallback_val = self._get_fallback_response_for_question(q)
+                        existing_bot_responses = [
+                            sub["response"] for s_id, sub in q_submissions.items()
+                            if sub.get("is_bot") and "response" in sub and s_id != sub_id
+                        ]
+                        fallback_val = self._get_fallback_response_for_question(q, avoid_responses=existing_bot_responses)
                         if isinstance(fallback_val, str) and fallback_val:
                             fallback_val = fallback_val[0].upper() + fallback_val[1:]
                         elif isinstance(fallback_val, list):

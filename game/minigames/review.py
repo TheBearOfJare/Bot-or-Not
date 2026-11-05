@@ -1,9 +1,10 @@
 import os
 import json
 import random
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from game.minigames.base import BaseMinigame
 from game.prompt_tracker import prompt_tracker
+from game.bot_engine import is_response_similar_to_any, GENERIC_REVIEW_FALLBACKS
 
 PROMPTS_FILE = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", "prompts", "review.json"))
 
@@ -93,35 +94,46 @@ class OneStarReviewGame(BaseMinigame):
     def _generate_bots(self):
         for q in self.questions:
             meta = q["meta"]
+            fallbacks = meta.get("fallbacks") if isinstance(meta, dict) else None
+            product = meta.get("product", "") if isinstance(meta, dict) else ""
+
+            if self.bot_engine:
+                reviews = self.bot_engine.generate_coordinated_reviews(
+                    product_name=product,
+                    bot_count=self.bot_count,
+                    fallback_answers=fallbacks
+                )
+            else:
+                reviews = [self._get_fallback_response_for_question(q) for _ in range(self.bot_count)]
+
             for i in range(self.bot_count):
                 bot_id = f"bot_{i+1}"
-                bot_name = self.bot_engine.get_bot_display_name()
+                bot_name = self.bot_engine.get_bot_display_name() if self.bot_engine else "Bot"
                 if bot_id not in q["bot_ids"]:
                     q["bot_ids"].append(bot_id)
 
-                review = self.bot_engine.generate_review(
-                    product_name=meta["product"],
-                    fallback_answers=meta.get("fallbacks")
-                )
-
+                resp = reviews[i] if i < len(reviews) else self._get_fallback_response_for_question(q)
                 sub_id = f"sub_{bot_id}"
                 q["submissions"][sub_id] = {
                     "id": sub_id,
                     "author_id": bot_id,
                     "author_name": bot_name,
                     "is_bot": True,
-                    "response": review,
+                    "response": resp,
                     "is_locked": True,
                     "version": 0
                 }
 
-    def _get_fallback_response_for_question(self, q: Dict[str, Any]) -> str:
+    def _get_fallback_response_for_question(self, q: Dict[str, Any], avoid_responses: List[Any] = None) -> str:
         meta = q.get("meta", {})
         fallbacks = meta.get("fallbacks") if isinstance(meta, dict) else None
-        if fallbacks:
-            chosen = random.choice(fallbacks)
-            return chosen[0].upper() + chosen[1:] if chosen else ""
-        return random.choice(GENERIC_REVIEW_FALLBACKS)
+        product = meta.get("product", "") if isinstance(meta, dict) else ""
+        if self.bot_engine:
+            return self.bot_engine._pick_distinct_fallback(fallbacks, GENERIC_REVIEW_FALLBACKS, avoid=avoid_responses, prompt_context=product)
+
+        pool = [f for f in (fallbacks or GENERIC_REVIEW_FALLBACKS) if not is_response_similar_to_any(f, avoid_responses or [], prompt_context=product)]
+        chosen = random.choice(pool) if pool else random.choice(GENERIC_REVIEW_FALLBACKS)
+        return chosen[0].upper() + chosen[1:] if chosen else ""
 
     def _get_fallback_response(self) -> str:
         return random.choice(GENERIC_REVIEW_FALLBACKS)
